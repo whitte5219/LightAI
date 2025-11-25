@@ -99,55 +99,36 @@ local sending = false
 -- HTTP HELPER (Cohere)
 -----------------------
 local function httpPostJson(url, jsonBody)
-    -- Try executor HTTP first (if using an exploit)
-    local httpRequest = (syn and syn.request)
+    local httpRequest =
+        (syn and syn.request)
         or (http and http.request)
         or http_request
         or request
         or (fluxus and fluxus.request)
 
+    local headers = {
+        ["Content-Type"] = "application/json",
+        ["Authorization"] = "Bearer " .. COHERE_KEY,
+        ["Cohere-Version"] = "2022-12-06"
+    }
+
     if httpRequest then
         local resp = httpRequest({
             Url = url,
             Method = "POST",
-            Headers = {
-                ["Content-Type"] = "application/json",
-                ["Authorization"] = "Bearer " .. COHERE_KEY,
-            },
+            Headers = headers,
             Body = jsonBody,
         })
-        if not resp then
-            error("Exploit HTTP returned nil response")
-        end
-        local body = resp.Body or resp.body
-        if not body then
-            error("Exploit HTTP response has no Body")
-        end
-        return body
+        if resp then return resp.Body or resp.body end
+        return nil
     else
-        -- Fallback: Roblox HttpService
-        local ok, resp = pcall(function()
-            return HttpService:RequestAsync({
-                Url = url,
-                Method = "POST",
-                Headers = {
-                    ["Content-Type"] = "application/json",
-                    ["Authorization"] = "Bearer " .. COHERE_KEY,
-                },
-                Body = jsonBody,
-            })
-        end)
-
-        if not ok or not resp then
-            error("HttpService.RequestAsync failed")
-        end
-
-        if not resp.Success then
-            error("HTTP " .. tostring(resp.StatusCode) .. " " .. tostring(resp.StatusMessage) ..
-                " | " .. tostring(resp.Body))
-        end
-
-        return resp.Body
+        return HttpService:PostAsync(
+            url,
+            jsonBody,
+            Enum.HttpContentType.ApplicationJson,
+            false,
+            headers
+        )
     end
 end
 
