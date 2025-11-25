@@ -15,8 +15,8 @@ local SIDEBAR_WIDTH = 150
 local PAGE_MARGIN = 10
 
 -- ========= OPENAI CONFIG =========
--- ⚠️ PUT YOUR REAL KEY HERE LOCALLY.
-local OPENAI_KEY = "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"
+-- DO NOT PUT REAL KEY HERE
+local OPENAI_KEY = (getgenv and getgenv().LIGHTAI_KEY) or "NO_KEY_SET"
 
 -- New OpenAI Responses endpoint
 local API_URL = "https://api.openai.com/v1/responses"
