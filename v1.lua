@@ -321,12 +321,37 @@ local function walkToNearest()
         pressKeyUp(Enum.KeyCode.A)
         pressKeyUp(Enum.KeyCode.D)
 
-        -- world-based movement
-        if diff.Z < -0.2 then pressKeyDown(Enum.KeyCode.W)
-        elseif diff.Z > 0.2 then pressKeyDown(Enum.KeyCode.S) end
+       -- CAMERA-BASED WASD MOVEMENT (FIXED)
+local camera = workspace.CurrentCamera
+local forward = camera.CFrame.LookVector * Vector3.new(1,0,1) -- flatten
+local right = camera.CFrame.RightVector * Vector3.new(1,0,1)  -- flatten
+forward = forward.Unit
+right = right.Unit
 
-        if diff.X > 0.2 then pressKeyDown(Enum.KeyCode.D)
-        elseif diff.X < -0.2 then pressKeyDown(Enum.KeyCode.A) end
+local diffDir = (targetPos - myPos).Unit
+
+local fDot = diffDir:Dot(forward)
+local rDot = diffDir:Dot(right)
+
+-- Release keys
+pressKeyUp(Enum.KeyCode.W)
+pressKeyUp(Enum.KeyCode.S)
+pressKeyUp(Enum.KeyCode.A)
+pressKeyUp(Enum.KeyCode.D)
+
+-- Forward/back
+if fDot > 0.2 then
+    pressKeyDown(Enum.KeyCode.W)
+elseif fDot < -0.2 then
+    pressKeyDown(Enum.KeyCode.S)
+end
+
+-- Left/right
+if rDot > 0.2 then
+    pressKeyDown(Enum.KeyCode.D)
+elseif rDot < -0.2 then
+    pressKeyDown(Enum.KeyCode.A)
+end
 
         RunService.Heartbeat:Wait()
     end
