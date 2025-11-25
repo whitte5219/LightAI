@@ -1,9 +1,9 @@
 --[[
-    LightAI - GUI + Chat AI (direct Cohere)
+    LightAI - GUI + Chat AI (direct OpenAI)
 
-    IMPORTANT:
-    - This script calls Cohere directly from Roblox.
-    - DO NOT commit your real API key to a public GitHub repo.
+    WARNING:
+    - This script calls OpenAI directly from Roblox.
+    - If you put your real API key in a public GitHub repo, other people can steal it.
 ]]
 
 -----------------------
@@ -14,12 +14,12 @@ local WINDOW_HEIGHT = 380
 local SIDEBAR_WIDTH = 150
 local PAGE_MARGIN = 10
 
--- ========= COHERE CONFIG =========
--- ⚠️ PUT YOUR REAL KEY HERE LOCALLY. DO NOT PUSH REAL KEY TO PUBLIC GITHUB.
-local COHERE_KEY = "iSWj4PzBCCuIuZJ0PrZE0uiQBxJ0gculwOOHvqJt"
+-- ========= OPENAI CONFIG =========
+-- ⚠️ PUT YOUR REAL KEY HERE LOCALLY.
+local OPENAI_KEY = "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"
 
--- Cohere Chat v1 endpoint
-local API_URL = "https://api.cohere.ai/v1/chat"
+-- OpenAI Chat Completions endpoint
+local API_URL = "https://api.openai.com/v1/chat/completions"
 -- =================================
 
 -----------------------
@@ -36,8 +36,8 @@ local localPlayer = Players.LocalPlayer or Players:GetPlayers()[1]
 -- AI CORE (CHAT + HISTORY)
 -----------------------
 local AI = {
-    Instructions = "You are LightAI, an experimental assistant controlled from a Roblox GUI. Be concise, helpful, and safe.",
-    Mode = "Advanced",          -- or "Quick" (can be used later to change settings)
+    Instructions = "You are LightAI, an experimental assistant controlled from a Roblox GUI. Be concise, helpful, safe, and explain your reasoning briefly.",
+    Mode = "Advanced",          -- or "Quick" (we can use this later)
     History = {},               -- { {role="user"/"ai"/"system", text="..."}, ... }
     MaxHistory = 20,
 }
@@ -96,21 +96,21 @@ end
 local sending = false
 
 -----------------------
--- HTTP HELPER (Cohere)
+-- HTTP HELPER (OpenAI)
 -----------------------
 local function httpPostJson(url, jsonBody)
+    local headers = {
+        ["Content-Type"] = "application/json",
+        ["Authorization"] = "Bearer " .. OPENAI_KEY,
+    }
+
+    -- Try executor HTTP first
     local httpRequest =
         (syn and syn.request)
         or (http and http.request)
         or http_request
         or request
         or (fluxus and fluxus.request)
-
-    local headers = {
-        ["Content-Type"] = "application/json",
-        ["Authorization"] = "Bearer " .. COHERE_KEY,
-        ["Cohere-Version"] = "2022-12-06"
-    }
 
     if httpRequest then
         local resp = httpRequest({
@@ -119,21 +119,40 @@ local function httpPostJson(url, jsonBody)
             Headers = headers,
             Body = jsonBody,
         })
-        if resp then return resp.Body or resp.body end
-        return nil
+        if not resp then
+            error("Exploit HTTP returned nil response")
+        end
+        local body = resp.Body or resp.body
+        if not body then
+            error("Exploit HTTP response has no Body")
+        end
+        return body
     else
-        return HttpService:PostAsync(
-            url,
-            jsonBody,
-            Enum.HttpContentType.ApplicationJson,
-            false,
-            headers
-        )
+        -- Fallback: Roblox HttpService
+        local ok, resp = pcall(function()
+            return HttpService:RequestAsync({
+                Url = url,
+                Method = "POST",
+                Headers = headers,
+                Body = jsonBody,
+            })
+        end)
+
+        if not ok or not resp then
+            error("HttpService.RequestAsync failed")
+        end
+
+        if not resp.Success then
+            error("HTTP " .. tostring(resp.StatusCode) .. " " .. tostring(resp.StatusMessage) ..
+                " | " .. tostring(resp.Body))
+        end
+
+        return resp.Body
     end
 end
 
 -----------------------
--- CALL COHERE
+-- CALL OPENAI
 -----------------------
 local function CallLightAI(userText)
     if sending then
@@ -147,30 +166,26 @@ local function CallLightAI(userText)
 
     task.spawn(function()
         local ok, result = pcall(function()
-            -- Build chat_history for Cohere
-            local chat_history = {}
+            -- Build messages for OpenAI
+            local messages = {
+                { role = "system", content = AI.Instructions }
+            }
 
             for _, h in ipairs(AI.History) do
-                if h.role == "user" then
-                    table.insert(chat_history, {
-                        role = "USER",
-                        message = h.text,
-                    })
-                elseif h.role == "ai" then
-                    table.insert(chat_history, {
-                        role = "CHATBOT",
-                        message = h.text,
+                if h.role == "user" or h.role == "ai" then
+                    local role = (h.role == "ai") and "assistant" or "user"
+                    table.insert(messages, {
+                        role = role,
+                        content = h.text
                     })
                 end
-                -- system messages are not added to chat_history; we use preamble instead
             end
 
+            table.insert(messages, { role = "user", content = userText })
+
             local payload = {
-                model = "command-r",
-                message = userText,
-                stream = false,
-                preamble = AI.Instructions,
-                chat_history = chat_history,
+                model = "gpt-4o-mini",
+                messages = messages,
             }
 
             local json = HttpService:JSONEncode(payload)
@@ -186,9 +201,13 @@ local function CallLightAI(userText)
                 error("Can't parse JSON. Raw body: " .. tostring(body))
             end
 
-            local reply = data.text
+            local reply = data.choices
+                and data.choices[1]
+                and data.choices[1].message
+                and data.choices[1].message.content
+
             if not reply or reply == "" then
-                reply = "(no reply from Cohere)"
+                reply = "(no reply from OpenAI)"
             end
 
             return reply
@@ -197,7 +216,7 @@ local function CallLightAI(userText)
         if ok then
             Log("ai", result)
         else
-            Log("system", "Error talking to Cohere: " .. tostring(result))
+            Log("system", "Error talking to OpenAI: " .. tostring(result))
         end
 
         sending = false
@@ -778,14 +797,13 @@ outputListLayout.FillDirection = Enum.FillDirection.Vertical
 outputListLayout.SortOrder = Enum.SortOrder.LayoutOrder
 outputListLayout.Parent = outputFrame
 
--- initial message
-Log("system", "LightAI (Cohere) ready. Type a message in the AI Control tab.")
+Log("system", "LightAI (OpenAI) ready. Type a message in the AI Control tab.")
 
 -----------------------
 -- PAGE CONTENT: GUI APPEARANCE (empty for now)
 -----------------------
 local guiAppearancePage = pages["GUI Appearance"]
--- add style sliders / toggles later if you want
+-- add style controls later if you want
 
 -----------------------
 -- DEFAULT ACTIVE TAB
