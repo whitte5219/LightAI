@@ -114,43 +114,16 @@ local function CallLightAI(userText)
 
         local ok, result = pcall(function()
             local json = HttpService:JSONEncode(payload)
+            local body
 
-            -- try normal Roblox HttpService first
-            local function tryHttpService()
-                local okHttp, resp = pcall(function()
-                    return HttpService:RequestAsync({
-                        Url = API_URL,
-                        Method = "POST",
-                        Headers = {
-                            ["Content-Type"] = "application/json",
-                        },
-                        Body = json,
-                    })
-                end)
+            -- 1) try exploit HTTP (syn.request / http.request / request / http_request / fluxus.request)
+            local httpRequest = (syn and syn.request)
+                or (http and http.request)
+                or http_request
+                or request
+                or (fluxus and fluxus.request)
 
-                if okHttp and resp and typeof(resp) == "table" and resp.Success then
-                    return resp.Body
-                elseif okHttp and resp and resp.Body then
-                    -- got a response but not Success; still return body for debugging
-                    return resp.Body
-                end
-
-                return nil, "HttpService not available or failed"
-            end
-
-            local body, httpErr = tryHttpService()
-            if not body then
-                -- fall back to exploit HTTP (syn.request / http.request / request / http_request / fluxus.request)
-                local httpRequest = (syn and syn.request)
-                    or (http and http.request)
-                    or http_request
-                    or request
-                    or (fluxus and fluxus.request)
-
-                if not httpRequest then
-                    error("No HTTP method available (HttpService + exploit request both missing). Extra info: " .. tostring(httpErr))
-                end
-
+            if httpRequest then
                 local resp = httpRequest({
                     Url = API_URL,
                     Method = "POST",
@@ -160,11 +133,14 @@ local function CallLightAI(userText)
                     Body = json,
                 })
 
-                if not resp or not resp.Body then
-                    error("Exploit HTTP request failed or returned no body")
+                -- many executors use resp.Body or resp.body
+                body = (type(resp) == "table" and (resp.Body or resp.body)) or nil
+                if not body then
+                    error("Exploit HTTP returned no body")
                 end
-
-                body = resp.Body
+            else
+                -- 2) fallback to normal Roblox HttpService:PostAsync (no .Success stuff)
+                body = HttpService:PostAsync(API_URL, json, Enum.HttpContentType.ApplicationJson, false)
             end
 
             local data = HttpService:JSONDecode(body)
@@ -180,6 +156,7 @@ local function CallLightAI(userText)
         sending = false
     end)
 end
+
 
 -----------------------
 -- ROOT GUI
