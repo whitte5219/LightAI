@@ -276,25 +276,20 @@ end
 -- ADVANCED ACTIONS
 -------------------------------------------------
 
-local PathfindingService = game:GetService("PathfindingService")
-
 local function walkToNearest()
     local target = getNearestPlayer()
-    if not target or not target.Character or not target.Character:FindFirstChild("HumanoidRootPart") then
-        return
-    end
+    if not target then return end
 
-    local char = player.Character
-    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+    local myChar = player.Character
+    if not myChar or not myChar:FindFirstChild("HumanoidRootPart") then return end
+    if not target.Character or not target.Character:FindFirstChild("HumanoidRootPart") then return end
 
-    local root = char.HumanoidRootPart
+    local root = myChar.HumanoidRootPart
 
     local MAX_TIME = 10
     local startTime = tick()
-    local lastRepath = 0
-    local REPATH_RATE = 0.3
 
-    -- Release keys
+    -- release all movement keys
     pressKeyUp(Enum.KeyCode.W)
     pressKeyUp(Enum.KeyCode.A)
     pressKeyUp(Enum.KeyCode.S)
@@ -303,74 +298,38 @@ local function walkToNearest()
     while tick() - startTime < MAX_TIME do
         if not target.Character or not target.Character:FindFirstChild("HumanoidRootPart") then break end
 
-        local myPos = root.Position
         local targetPos = target.Character.HumanoidRootPart.Position
+        local myPos = root.Position
+        local diff = targetPos - myPos
 
-        if (myPos - targetPos).Magnitude <= 1 then
+        -- STOP within 1.5 studs
+        if diff.Magnitude <= 1.5 then
             break
         end
 
-        -- repath
-        if tick() - lastRepath > REPATH_RATE then
-            lastRepath = tick()
+        -- RELEASE KEYS FIRST
+        pressKeyUp(Enum.KeyCode.W)
+        pressKeyUp(Enum.KeyCode.S)
+        pressKeyUp(Enum.KeyCode.A)
+        pressKeyUp(Enum.KeyCode.D)
 
-            local path = PathfindingService:CreatePath({
-                AgentCanJump = true
-            })
+        -- PURE WORLD-SPACE MOVEMENT
+        if diff.Z < -0.5 then
+            pressKeyDown(Enum.KeyCode.W)
+        elseif diff.Z > 0.5 then
+            pressKeyDown(Enum.KeyCode.S)
+        end
 
-            local success = pcall(function()
-                path:ComputeAsync(myPos, targetPos)
-            end)
-
-            if success and path.Status == Enum.PathStatus.Success then
-                local waypoints = path:GetWaypoints()
-
-                for i, wp in ipairs(waypoints) do
-                    local wpPos = wp.Position
-
-                    if (root.Position - targetPos).Magnitude <= 1 then break end
-                    if not target.Character then break end
-
-                    -- VECTOR TO WAYPOINT
-                    local diff = (wpPos - root.Position)
-
-                    -- DIRECTION BASED ON SIGN ONLY
-                    pressKeyUp(Enum.KeyCode.W)
-                    pressKeyUp(Enum.KeyCode.A)
-                    pressKeyUp(Enum.KeyCode.S)
-                    pressKeyUp(Enum.KeyCode.D)
-
-                    if diff.Z < 0 then
-                        pressKeyDown(Enum.KeyCode.W)
-                    elseif diff.Z > 0 then
-                        pressKeyDown(Enum.KeyCode.S)
-                    end
-
-                    if diff.X > 0 then
-                        pressKeyDown(Enum.KeyCode.D)
-                    elseif diff.X < 0 then
-                        pressKeyDown(Enum.KeyCode.A)
-                    end
-
-                    if wp.Action == Enum.PathWaypointAction.Jump then
-                        pressKey(Enum.KeyCode.Space, 0.1)
-                    end
-
-                    -- Move until close
-                    while (root.Position - wpPos).Magnitude > 2 do
-                        if not target.Character then break end
-                        if (root.Position - targetPos).Magnitude <= 1 then break end
-                        if tick() - startTime > MAX_TIME then break end
-                        RunService.Heartbeat:Wait()
-                    end
-                end
-            end
+        if diff.X > 0.5 then
+            pressKeyDown(Enum.KeyCode.D)
+        elseif diff.X < -0.5 then
+            pressKeyDown(Enum.KeyCode.A)
         end
 
         RunService.Heartbeat:Wait()
     end
 
-    -- RELEASE ALL KEYS
+    -- release keys when finished
     pressKeyUp(Enum.KeyCode.W)
     pressKeyUp(Enum.KeyCode.A)
     pressKeyUp(Enum.KeyCode.S)
