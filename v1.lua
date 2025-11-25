@@ -1,9 +1,8 @@
 --[[
-    LightAI - GUI + Chat AI (Cohere)
+    LightAI - GUI + Chat + Character Control (Cohere)
 
-    WARNING:
-    - This script calls Cohere directly from Roblox.
-    - The API key is NOT stored here; it is read from getgenv().LIGHTAI_KEY.
+    - Cohere API key is read from getgenv().LIGHTAI_KEY
+    - No secrets are stored in the script / GitHub
 ]]
 
 -----------------------
@@ -20,25 +19,48 @@ local PAGE_MARGIN = 10
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local HttpService = game:GetService("HttpService")
+local RunService = game:GetService("RunService")
 
 local localPlayer = Players.LocalPlayer or Players:GetPlayers()[1]
 
 -----------------------
 -- AI CORE (CHAT + HISTORY)
 -----------------------
+local CHAT_INSTRUCTIONS = "You are LightAI, a friendly assistant inside a Roblox GUI. Speak casually, like a normal player. You must still follow safety rules and refuse anything harmful or NSFW, but for normal questions answer directly and naturally."
+
+local CONTROL_INSTRUCTIONS = [[You control the player's Roblox character in a game.
+
+You MUST respond ONLY with JSON and NOTHING ELSE.
+
+JSON format (no comments):
+
+{"actions":[
+  {"type":"MOVE","direction":"forward","time":0.5},
+  {"type":"JUMP"}
+]}
+
+Rules:
+- Valid action types: "MOVE", "JUMP".
+- For MOVE:
+  - "direction" must be one of: "forward","back","left","right".
+  - "time" is how long to move in seconds, between 0.1 and 2.0. If missing, assume 0.5.
+- For JUMP: only {"type":"JUMP"} is required.
+- You may output multiple actions in the array.
+- Never include extra text outside the JSON, never explanations, never code blocks.
+]]
+
 local AI = {
-    Instructions = "You are LightAI, a friendly gaming assistant inside Roblox. \
-Speak casually and like a normal player (you can use simple slang, short sentences, etc.). \
-You must still follow Cohere safety rules and refuse anything harmful, illegal or NSFW, \
-but for normal, safe questions you answer directly and naturally.",
-    Mode = "Advanced",          -- or "Quick"
-    History = {},               -- { {role="user"/"ai"/"system", text="..."}, ... }
+    ChatInstructions = CHAT_INSTRUCTIONS,
+    ControlInstructions = CONTROL_INSTRUCTIONS,
+    Mode = "Advanced",
+    History = {},
     MaxHistory = 20,
 }
 
 local outputFrame
 local outputListLayout
 local sending = false
+local ControlCharacterEnabled = false
 
 -----------------------
 -- LOGGING / HISTORY
@@ -95,7 +117,7 @@ end
 -- COHERE CONFIG + HTTP
 -----------------------
 local COHERE_KEY = (getgenv and getgenv().LIGHTAI_KEY) or "NO_KEY_SET"
-local COHERE_MODEL = "command-a-vision-07-2025"
+local COHERE_MODEL = "command"           -- choose a valid model from your Cohere account
 local API_URL = "https://api.cohere.ai/v1/chat"
 
 local function httpPostJson(url, jsonBody)
@@ -155,6 +177,68 @@ local function httpPostJson(url, jsonBody)
 end
 
 -----------------------
+-- CHARACTER CONTROL HELPERS
+-----------------------
+local function getHumanoid()
+    local character = localPlayer.Character or localPlayer.CharacterAdded:Wait()
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    return character, humanoid
+end
+
+local function moveDirection(direction, duration)
+    local _, humanoid = getHumanoid()
+    if not humanoid then return end
+
+    duration = math.clamp(duration or 0.5, 0.1, 2)
+
+    local dirVector
+    if direction == "forward" then
+        dirVector = Vector3.new(0, 0, -1)
+    elseif direction == "back" then
+        dirVector = Vector3.new(0, 0, 1)
+    elseif direction == "left" then
+        dirVector = Vector3.new(-1, 0, 0)
+    elseif direction == "right" then
+        dirVector = Vector3.new(1, 0, 0)
+    else
+        return
+    end
+
+    local startTime = tick()
+    while tick() - startTime < duration do
+        humanoid:Move(dirVector, true) -- relative to camera
+        RunService.Heartbeat:Wait()
+    end
+    humanoid:Move(Vector3.new(0, 0, 0), true)
+end
+
+local function doJump()
+    local _, humanoid = getHumanoid()
+    if humanoid then
+        humanoid.Jump = true
+    end
+end
+
+local function executeAction(action)
+    if type(action) ~= "table" then return end
+    local t = action.type
+    if t == "MOVE" then
+        local dir = string.lower(action.direction or "forward")
+        local time = tonumber(action.time) or 0.5
+        moveDirection(dir, time)
+    elseif t == "JUMP" then
+        doJump()
+    end
+end
+
+local function executeActions(actions)
+    if type(actions) ~= "table" then return end
+    for _, act in ipairs(actions) do
+        executeAction(act)
+    end
+end
+
+-----------------------
 -- CALL COHERE
 -----------------------
 function CallLightAI(userText)
@@ -186,10 +270,12 @@ function CallLightAI(userText)
                 end
             end
 
+            local preamble = ControlCharacterEnabled and AI.ControlInstructions or AI.ChatInstructions
+
             local payload = {
                 model = COHERE_MODEL,
                 message = userText,
-                preamble = AI.Instructions,
+                preamble = preamble,
                 chat_history = chat_history,
                 stream = false,
             }
@@ -216,7 +302,26 @@ function CallLightAI(userText)
         end)
 
         if ok then
-            Log("ai", result)
+            local reply = result
+
+            if ControlCharacterEnabled then
+                -- In control mode, reply MUST be JSON
+                local decodeOK, decoded = pcall(function()
+                    return HttpService:JSONDecode(reply)
+                end)
+
+                if decodeOK and type(decoded) == "table" and type(decoded.actions) == "table" then
+                    Log("system", "Executing control actions...")
+                    executeActions(decoded.actions)
+                    -- Optional: show raw JSON
+                    Log("ai", "Commands: " .. reply)
+                else
+                    Log("system", "Failed to parse control JSON, got:\n" .. tostring(reply))
+                end
+            else
+                -- Normal chat mode
+                Log("ai", reply)
+            end
         else
             Log("system", "Error talking to Cohere: " .. tostring(result))
         end
@@ -749,10 +854,74 @@ end)
 -----------------------
 local aiOutputPage = pages["AI Output"]
 
+-- Control Character toggle UI
+local toggleFrame = Instance.new("Frame")
+toggleFrame.Name = "ControlToggleFrame"
+toggleFrame.BackgroundTransparency = 1
+toggleFrame.Size = UDim2.new(1, 0, 0, 24)
+toggleFrame.Position = UDim2.new(0, 0, 0, 40)
+toggleFrame.Parent = aiOutputPage
+
+local toggleLabel = Instance.new("TextLabel")
+toggleLabel.BackgroundTransparency = 1
+toggleLabel.Size = UDim2.new(0, 180, 1, 0)
+toggleLabel.Font = Enum.Font.Gotham
+toggleLabel.TextSize = 14
+toggleLabel.TextXAlignment = Enum.TextXAlignment.Left
+toggleLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
+toggleLabel.Text = "Control Character:"
+toggleLabel.Parent = toggleFrame
+
+local toggleButton = Instance.new("TextButton")
+toggleButton.Name = "ControlToggle"
+toggleButton.Size = UDim2.new(0, 80, 0, 22)
+toggleButton.Position = UDim2.new(0, 190, 0, 1)
+toggleButton.BackgroundColor3 = Color3.fromRGB(40, 0, 0)
+toggleButton.BorderSizePixel = 0
+toggleButton.AutoButtonColor = false
+toggleButton.Font = Enum.Font.GothamBold
+toggleButton.TextSize = 14
+toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleButton.Text = "OFF"
+toggleButton.Parent = toggleFrame
+
+local toggleCorner = Instance.new("UICorner")
+toggleCorner.CornerRadius = UDim.new(0, 10)
+toggleCorner.Parent = toggleButton
+
+local toggleStroke = Instance.new("UIStroke")
+toggleStroke.Color = Color3.fromRGB(255, 255, 255)
+toggleStroke.Transparency = 0.7
+toggleStroke.Thickness = 1
+toggleStroke.Parent = toggleButton
+
+local function updateToggleVisual()
+    if ControlCharacterEnabled then
+        toggleButton.BackgroundColor3 = Color3.fromRGB(0, 40, 0)
+        toggleButton.Text = "ON"
+    else
+        toggleButton.BackgroundColor3 = Color3.fromRGB(40, 0, 0)
+        toggleButton.Text = "OFF"
+    end
+end
+
+toggleButton.MouseButton1Click:Connect(function()
+    ControlCharacterEnabled = not ControlCharacterEnabled
+    updateToggleVisual()
+    if ControlCharacterEnabled then
+        Log("system", "Control Character ENABLED. AI will output commands and move your character.")
+    else
+        Log("system", "Control Character DISABLED. AI is back to chat mode.")
+    end
+end)
+
+updateToggleVisual()
+
+-- Output box
 local outputBg = Instance.new("Frame")
 outputBg.Name = "OutputBackground"
-outputBg.Size = UDim2.new(1, 0, 1, -40)
-outputBg.Position = UDim2.new(0, 0, 0, 40)
+outputBg.Size = UDim2.new(1, 0, 1, -70)
+outputBg.Position = UDim2.new(0, 0, 0, 70)
 outputBg.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 outputBg.BorderSizePixel = 0
 outputBg.Parent = aiOutputPage
