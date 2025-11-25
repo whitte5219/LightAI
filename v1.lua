@@ -28,27 +28,26 @@ local localPlayer = Players.LocalPlayer or Players:GetPlayers()[1]
 -----------------------
 local CHAT_INSTRUCTIONS = "You are LightAI, a friendly assistant inside a Roblox GUI. Speak casually, like a normal player. You must still follow safety rules and refuse anything harmful or NSFW, but for normal questions answer directly and naturally."
 
-local CONTROL_INSTRUCTIONS = [[You control the player's Roblox character in a game.
+local CONTROL_INSTRUCTIONS = [[You control the player's Roblox character.
 
-You MUST respond ONLY with JSON and NOTHING ELSE.
+You MUST respond ONLY with a single JSON object and NOTHING ELSE.
+Do not write "Commands:", "Here is the JSON", code blocks, or explanations.
 
-JSON format (no comments):
+Correct format (no comments):
 
 {"actions":[
   {"type":"MOVE","direction":"forward","time":0.5},
   {"type":"JUMP"}
-]}
 
 Rules:
-- Valid action types: "MOVE", "JUMP".
-- For MOVE:
-  - "direction" must be one of: "forward","back","left","right".
-  - "time" is how long to move in seconds, between 0.1 and 2.0. If missing, assume 0.5.
-- For JUMP: only {"type":"JUMP"} is required.
-- You may output multiple actions in the array.
-- Never include extra text outside the JSON, never explanations, never code blocks.
-]]
+- action types: "MOVE", "JUMP"
+- MOVE:
+  - "direction": "forward","back","left","right"
+  - "time": seconds of movement, between 0.1 and 2.0 (if missing, assume 0.5)
+- JUMP:
+  - {"type":"JUMP"}
 
+Again: output ONLY the JSON object. No extra text.]]
 local AI = {
     ChatInstructions = CHAT_INSTRUCTIONS,
     ControlInstructions = CONTROL_INSTRUCTIONS,
@@ -305,29 +304,26 @@ function CallLightAI(userText)
             local reply = result
 
             if ControlCharacterEnabled then
-                -- In control mode, reply MUST be JSON
-                local decodeOK, decoded = pcall(function()
-                    return HttpService:JSONDecode(reply)
-                end)
+    -- Try to pull just the JSON block from the reply
+    local jsonChunk = reply:match("{.*}")
+    if not jsonChunk then
+        Log("system", "Couldn't find JSON in control reply:\n" .. tostring(reply))
+    else
+        local decodeOK, decoded = pcall(function()
+            return HttpService:JSONDecode(jsonChunk)
+        end)
 
-                if decodeOK and type(decoded) == "table" and type(decoded.actions) == "table" then
-                    Log("system", "Executing control actions...")
-                    executeActions(decoded.actions)
-                    -- Optional: show raw JSON
-                    Log("ai", "Commands: " .. reply)
-                else
-                    Log("system", "Failed to parse control JSON, got:\n" .. tostring(reply))
-                end
-            else
-                -- Normal chat mode
-                Log("ai", reply)
-            end
+        if decodeOK and type(decoded) == "table" and type(decoded.actions) == "table" then
+            Log("system", "Executing control actions...")
+            executeActions(decoded.actions)
+            Log("ai", "Commands: " .. jsonChunk)
         else
-            Log("system", "Error talking to Cohere: " .. tostring(result))
+            Log("system", "Failed to parse control JSON:\n" .. tostring(jsonChunk))
         end
-
-        sending = false
-    end)
+    end
+else
+    -- Normal chat mode
+    Log("ai", reply)
 end
 
 -----------------------
