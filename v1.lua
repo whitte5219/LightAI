@@ -334,18 +334,35 @@ local function walkToNearest()
                     if not targetPlayer.Character or not targetPlayer.Character:FindFirstChild("HumanoidRootPart") then break end
 
                     local wpPos = wp.Position
-                    local diff = (wpPos - root.Position)
+                    local camera = workspace.CurrentCamera
+local forward = camera.CFrame.LookVector
+local right = camera.CFrame.RightVector
 
-                    -- Determine horizontal direction
-                    pressKeyUp(Enum.KeyCode.W)
-                    pressKeyUp(Enum.KeyCode.S)
-                    pressKeyUp(Enum.KeyCode.A)
-                    pressKeyUp(Enum.KeyCode.D)
+local diff = (wpPos - root.Position).Unit
 
-                    if diff.Z < -1 then pressKeyDown(Enum.KeyCode.W) end
-                    if diff.Z > 1 then pressKeyDown(Enum.KeyCode.S) end
-                    if diff.X > 1 then pressKeyDown(Enum.KeyCode.D) end
-                    if diff.X < -1 then pressKeyDown(Enum.KeyCode.A) end
+-- Dot products tell which direction to move
+local fDot = diff:Dot(forward)
+local rDot = diff:Dot(right)
+
+-- release keys first
+pressKeyUp(Enum.KeyCode.W)
+pressKeyUp(Enum.KeyCode.S)
+pressKeyUp(Enum.KeyCode.A)
+pressKeyUp(Enum.KeyCode.D)
+
+-- Forward/back
+if fDot > 0.2 then
+    pressKeyDown(Enum.KeyCode.W)
+elseif fDot < -0.2 then
+    pressKeyDown(Enum.KeyCode.S)
+end
+
+-- Left/right
+if rDot > 0.2 then
+    pressKeyDown(Enum.KeyCode.D)
+elseif rDot < -0.2 then
+    pressKeyDown(Enum.KeyCode.A)
+end
 
                     -- jump if needed
                     if wp.Action == Enum.PathWaypointAction.Jump then
