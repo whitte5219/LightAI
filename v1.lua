@@ -114,8 +114,21 @@ local function CallLightAI(userText)
 
         local ok, result = pcall(function()
             local json = HttpService:JSONEncode(payload)
-            local response = HttpService:PostAsync(API_URL, json, Enum.HttpContentType.ApplicationJson)
-            local data = HttpService:JSONDecode(response)
+
+            local response = HttpService:RequestAsync({
+                Url = API_URL,
+                Method = "POST",
+                Headers = {
+                    ["Content-Type"] = "application/json",
+                },
+                Body = json,
+            })
+
+            if not response.Success then
+                error("HTTP "..tostring(response.StatusCode)..": "..tostring(response.StatusMessage))
+            end
+
+            local data = HttpService:JSONDecode(response.Body)
             return data.reply or "(no reply from server)"
         end)
 
