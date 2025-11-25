@@ -21,7 +21,8 @@ local WINDOW_HEIGHT = 380
 local SIDEBAR_WIDTH = 150
 local PAGE_MARGIN = 10
 
-local API_URL = "https://lightai-proxy-whitte5219.vercel.app/api/lightai"
+local API_URL = "https://lightai-proxy-git-main-whittes-projects.vercel.app/api/lightai"
+-- or whatever exact domain Vercel shows
 
 -----------------------
 -- SERVICES
