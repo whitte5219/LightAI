@@ -16,7 +16,7 @@ local PAGE_MARGIN = 10
 
 -- ========= OPENAI CONFIG =========
 -- ⚠️ PUT YOUR REAL KEY HERE LOCALLY.
-local OPENAI_KEY = "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"
+local OPENAI_KEY = "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"
 
 -- New OpenAI Responses endpoint
 local API_URL = "https://api.openai.com/v1/responses"
