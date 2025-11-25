@@ -1,9 +1,9 @@
 --[[
-    LightAI - GUI + Chat AI (direct OpenAI)
+    LightAI - GUI + Chat AI (OpenAI Responses API)
 
     WARNING:
     - This script calls OpenAI directly from Roblox.
-    - If you put your real API key in a public GitHub repo, other people can steal it.
+    - If you put your real API key in a public GitHub repo, anyone can steal it.
 ]]
 
 -----------------------
@@ -18,8 +18,8 @@ local PAGE_MARGIN = 10
 -- ⚠️ PUT YOUR REAL KEY HERE LOCALLY.
 local OPENAI_KEY = "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"
 
--- OpenAI Chat Completions endpoint
-local API_URL = "https://api.openai.com/v1/chat/completions"
+-- New OpenAI Responses endpoint
+local API_URL = "https://api.openai.com/v1/responses"
 -- =================================
 
 -----------------------
@@ -27,7 +27,6 @@ local API_URL = "https://api.openai.com/v1/chat/completions"
 -----------------------
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
-local UserInputService = game:GetService("UserInputService")
 local HttpService = game:GetService("HttpService")
 
 local localPlayer = Players.LocalPlayer or Players:GetPlayers()[1]
@@ -36,14 +35,15 @@ local localPlayer = Players.LocalPlayer or Players:GetPlayers()[1]
 -- AI CORE (CHAT + HISTORY)
 -----------------------
 local AI = {
-    Instructions = "You are LightAI, an experimental assistant controlled from a Roblox GUI. Be concise, helpful, safe, and explain your reasoning briefly.",
-    Mode = "Advanced",          -- or "Quick" (we can use this later)
-    History = {},               -- { {role="user"/"ai"/"system", text="..."}, ... }
+    Instructions = "You are LightAI, an experimental assistant controlled from a Roblox GUI. Be concise and safe.",
+    Mode = "Advanced",
+    History = {},
     MaxHistory = 20,
 }
 
 local outputFrame
 local outputListLayout
+local sending = false
 
 local function addToHistory(role, text)
     table.insert(AI.History, { role = role, text = text })
@@ -93,8 +93,6 @@ local function Log(role, text)
     createLogLabel(role, text)
 end
 
-local sending = false
-
 -----------------------
 -- HTTP HELPER (OpenAI)
 -----------------------
@@ -104,7 +102,6 @@ local function httpPostJson(url, jsonBody)
         ["Authorization"] = "Bearer " .. OPENAI_KEY,
     }
 
-    -- Try executor HTTP first
     local httpRequest =
         (syn and syn.request)
         or (http and http.request)
@@ -128,7 +125,6 @@ local function httpPostJson(url, jsonBody)
         end
         return body
     else
-        -- Fallback: Roblox HttpService
         local ok, resp = pcall(function()
             return HttpService:RequestAsync({
                 Url = url,
@@ -152,7 +148,7 @@ local function httpPostJson(url, jsonBody)
 end
 
 -----------------------
--- CALL OPENAI
+-- CALL OPENAI (Responses API)
 -----------------------
 local function CallLightAI(userText)
     if sending then
@@ -166,7 +162,7 @@ local function CallLightAI(userText)
 
     task.spawn(function()
         local ok, result = pcall(function()
-            -- Build messages for OpenAI
+            -- Build input messages array for Responses API
             local messages = {
                 { role = "system", content = AI.Instructions }
             }
@@ -185,7 +181,7 @@ local function CallLightAI(userText)
 
             local payload = {
                 model = "gpt-4o-mini",
-                messages = messages,
+                input = messages,
             }
 
             local json = HttpService:JSONEncode(payload)
@@ -201,13 +197,12 @@ local function CallLightAI(userText)
                 error("Can't parse JSON. Raw body: " .. tostring(body))
             end
 
-            local reply = data.choices
-                and data.choices[1]
-                and data.choices[1].message
-                and data.choices[1].message.content
+            -- New Responses API convenience field
+            local reply = data.output_text
 
             if not reply or reply == "" then
-                reply = "(no reply from OpenAI)"
+                -- show some raw info so we actually see the problem
+                reply = "(no output_text from OpenAI)\nRaw: " .. string.sub(HttpService:JSONEncode(data), 1, 200)
             end
 
             return reply
@@ -474,11 +469,7 @@ pagePadding.Parent = pageContainer
 -----------------------
 -- TABS / PAGES
 -----------------------
-local tabs = {
-    "AI Control",
-    "AI Output",
-    "GUI Appearance",
-}
+local tabs = { "AI Control", "AI Output", "GUI Appearance" }
 
 local pages = {}
 local tabButtons = {}
@@ -585,20 +576,17 @@ end
 for _, name in ipairs(tabs) do
     local btn = createTabButton(name)
     createPage(name)
-
     btn.MouseButton1Click:Connect(function()
         setActiveTab(name)
     end)
 end
 
 -----------------------
--- PAGE CONTENT: AI CONTROL
+-- PAGE: AI CONTROL
 -----------------------
 local aiControlPage = pages["AI Control"]
 
--- Mode buttons
 local modeFrame = Instance.new("Frame")
-modeFrame.Name = "ModeFrame"
 modeFrame.BackgroundTransparency = 1
 modeFrame.Size = UDim2.new(1, 0, 0, 36)
 modeFrame.Position = UDim2.new(0, 0, 0, 40)
@@ -646,7 +634,6 @@ quickButton.Parent = modeFrame
 local function updateModeButtons()
     local activeColor = Color3.fromRGB(25, 25, 25)
     local inactiveColor = Color3.fromRGB(0, 0, 0)
-
     if AI.Mode == "Advanced" then
         advancedButton.BackgroundColor3 = activeColor
         quickButton.BackgroundColor3 = inactiveColor
@@ -657,18 +644,13 @@ local function updateModeButtons()
 end
 
 advancedButton.MouseButton1Click:Connect(function()
-    AI.Mode = "Advanced"
-    updateModeButtons()
+    AI.Mode = "Advanced"; updateModeButtons()
 end)
-
 quickButton.MouseButton1Click:Connect(function()
-    AI.Mode = "Quick"
-    updateModeButtons()
+    AI.Mode = "Quick"; updateModeButtons()
 end)
-
 updateModeButtons()
 
--- User message box
 local msgLabel = Instance.new("TextLabel")
 msgLabel.BackgroundTransparency = 1
 msgLabel.Size = UDim2.new(1, 0, 0, 20)
@@ -707,7 +689,6 @@ msgStroke.Transparency = 0.8
 msgStroke.Thickness = 1
 msgStroke.Parent = msgBox
 
--- Send button
 local sendButton = Instance.new("TextButton")
 sendButton.Name = "SendButton"
 sendButton.Size = UDim2.new(0, 100, 0, 32)
@@ -732,13 +713,12 @@ sendStroke.Thickness = 1
 sendStroke.Parent = sendButton
 
 sendButton.MouseEnter:Connect(function()
-    TweenService:Create(sendButton, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+    TweenService:Create(sendButton, TweenInfo.new(0.15), {
         BackgroundColor3 = Color3.fromRGB(25, 25, 25)
     }):Play()
 end)
-
 sendButton.MouseLeave:Connect(function()
-    TweenService:Create(sendButton, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+    TweenService:Create(sendButton, TweenInfo.new(0.15), {
         BackgroundColor3 = Color3.fromRGB(0, 0, 0)
     }):Play()
 end)
@@ -758,7 +738,7 @@ msgBox.FocusLost:Connect(function(enterPressed)
 end)
 
 -----------------------
--- PAGE CONTENT: AI OUTPUT
+-- PAGE: AI OUTPUT
 -----------------------
 local aiOutputPage = pages["AI Output"]
 
@@ -797,15 +777,15 @@ outputListLayout.FillDirection = Enum.FillDirection.Vertical
 outputListLayout.SortOrder = Enum.SortOrder.LayoutOrder
 outputListLayout.Parent = outputFrame
 
-Log("system", "LightAI (OpenAI) ready. Type a message in the AI Control tab.")
+Log("system", "LightAI (OpenAI Responses) ready. Type a message in the AI Control tab.")
 
 -----------------------
--- PAGE CONTENT: GUI APPEARANCE (empty for now)
+-- PAGE: GUI APPEARANCE (empty)
 -----------------------
 local guiAppearancePage = pages["GUI Appearance"]
--- add style controls later if you want
+-- (Add appearance options later if you want.)
 
 -----------------------
--- DEFAULT ACTIVE TAB
+-- DEFAULT TAB
 -----------------------
 setActiveTab("AI Control")
