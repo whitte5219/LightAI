@@ -115,20 +115,59 @@ local function CallLightAI(userText)
         local ok, result = pcall(function()
             local json = HttpService:JSONEncode(payload)
 
-            local response = HttpService:RequestAsync({
-                Url = API_URL,
-                Method = "POST",
-                Headers = {
-                    ["Content-Type"] = "application/json",
-                },
-                Body = json,
-            })
+            -- try normal Roblox HttpService first
+            local function tryHttpService()
+                local okHttp, resp = pcall(function()
+                    return HttpService:RequestAsync({
+                        Url = API_URL,
+                        Method = "POST",
+                        Headers = {
+                            ["Content-Type"] = "application/json",
+                        },
+                        Body = json,
+                    })
+                end)
 
-            if not response.Success then
-                error("HTTP "..tostring(response.StatusCode)..": "..tostring(response.StatusMessage))
+                if okHttp and resp and typeof(resp) == "table" and resp.Success then
+                    return resp.Body
+                elseif okHttp and resp and resp.Body then
+                    -- got a response but not Success; still return body for debugging
+                    return resp.Body
+                end
+
+                return nil, "HttpService not available or failed"
             end
 
-            local data = HttpService:JSONDecode(response.Body)
+            local body, httpErr = tryHttpService()
+            if not body then
+                -- fall back to exploit HTTP (syn.request / http.request / request / http_request / fluxus.request)
+                local httpRequest = (syn and syn.request)
+                    or (http and http.request)
+                    or http_request
+                    or request
+                    or (fluxus and fluxus.request)
+
+                if not httpRequest then
+                    error("No HTTP method available (HttpService + exploit request both missing). Extra info: " .. tostring(httpErr))
+                end
+
+                local resp = httpRequest({
+                    Url = API_URL,
+                    Method = "POST",
+                    Headers = {
+                        ["Content-Type"] = "application/json",
+                    },
+                    Body = json,
+                })
+
+                if not resp or not resp.Body then
+                    error("Exploit HTTP request failed or returned no body")
+                end
+
+                body = resp.Body
+            end
+
+            local data = HttpService:JSONDecode(body)
             return data.reply or "(no reply from server)"
         end)
 
