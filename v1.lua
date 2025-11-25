@@ -1,12 +1,19 @@
 --[[  
     LightAI - GUI ONLY (no AI yet)
-    Single-file, black & white, Windows-like panel with:
-    - Title bar + smooth dragging
-    - Left tab sidebar
-    - Main content area with "Combat" tab
-    - Aura Cooldown slider
-    - Warning panel
+    Updated:
+    - Only 3 tabs: AI Control, AI Output, GUI Appearance
+    - Window made less wide + sidebar thinner
+    - Centered better so it doesn't stick out on the right
+    - Close "X" button made a bit larger / sharper
 ]]
+
+-----------------------
+-- CONFIG
+-----------------------
+local WINDOW_WIDTH = 600
+local WINDOW_HEIGHT = 380
+local SIDEBAR_WIDTH = 150
+local PAGE_MARGIN = 10
 
 -----------------------
 -- SERVICES
@@ -24,7 +31,6 @@ local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "LightAI"
 screenGui.ResetOnSpawn = false
 
--- Try to parent safely (exploit / plugin / normal)
 local parentOk = false
 pcall(function()
 	if gethui then
@@ -45,9 +51,9 @@ end
 -----------------------
 local mainFrame = Instance.new("Frame")
 mainFrame.Name = "MainFrame"
-mainFrame.Size = UDim2.new(0, 700, 0, 420)
-mainFrame.Position = UDim2.new(0.5, -350, 0.5, -210)
-mainFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0) -- fully black
+mainFrame.Size = UDim2.new(0, WINDOW_WIDTH, 0, WINDOW_HEIGHT)
+mainFrame.Position = UDim2.new(0.5, -WINDOW_WIDTH/2, 0.5, -WINDOW_HEIGHT/2)
+mainFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 mainFrame.BorderSizePixel = 0
 mainFrame.Parent = screenGui
 
@@ -60,13 +66,6 @@ mainStroke.Color = Color3.fromRGB(255, 255, 255)
 mainStroke.Thickness = 1
 mainStroke.Transparency = 0.8
 mainStroke.Parent = mainFrame
-
-local mainPadding = Instance.new("UIPadding")
-mainPadding.PaddingTop = UDim.new(0, 0)
-mainPadding.PaddingLeft = UDim.new(0, 0)
-mainPadding.PaddingRight = UDim.new(0, 0)
-mainPadding.PaddingBottom = UDim.new(0, 0)
-mainPadding.Parent = mainFrame
 
 -----------------------
 -- TITLE BAR
@@ -100,7 +99,7 @@ titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 titleLabel.Text = "LightAI"
 titleLabel.Parent = titleBar
 
--- Window controls (minimalistic, no emojis)
+-- Window controls
 local controlsFrame = Instance.new("Frame")
 controlsFrame.Name = "ControlsFrame"
 controlsFrame.BackgroundTransparency = 1
@@ -115,17 +114,17 @@ uiListControls.VerticalAlignment = Enum.VerticalAlignment.Center
 uiListControls.Padding = UDim.new(0, 8)
 uiListControls.Parent = controlsFrame
 
-local function createWindowButton(name, hint)
+local function createWindowButton(name, textChar)
 	local btn = Instance.new("TextButton")
 	btn.Name = name
-	btn.Size = UDim2.new(0, 20, 0, 20)
+	btn.Size = UDim2.new(0, 22, 0, 22)
 	btn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 	btn.BorderSizePixel = 0
 	btn.AutoButtonColor = false
 	btn.Font = Enum.Font.GothamBold
 	btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-	btn.TextSize = 14
-	btn.Text = hint
+	btn.TextSize = 16      -- slightly larger/clearer
+	btn.Text = textChar
 	btn.Parent = controlsFrame
 
 	local corner = Instance.new("UICorner")
@@ -138,7 +137,6 @@ local function createWindowButton(name, hint)
 	stroke.Thickness = 1
 	stroke.Parent = btn
 
-	-- Hover animation
 	btn.MouseEnter:Connect(function()
 		TweenService:Create(btn, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
 			BackgroundColor3 = Color3.fromRGB(30, 30, 30)
@@ -159,7 +157,7 @@ local closeButton = createWindowButton("CloseButton", "x")
 
 minimizeButton.MouseButton1Click:Connect(function()
 	TweenService:Create(mainFrame, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-		Size = UDim2.new(0, 700, 0, 40)
+		Size = UDim2.new(0, WINDOW_WIDTH, 0, 40)
 	}):Play()
 end)
 
@@ -167,12 +165,12 @@ closeButton.MouseButton1Click:Connect(function()
 	TweenService:Create(mainFrame, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
 		BackgroundTransparency = 1
 	}):Play()
-	wait(0.16)
+	task.wait(0.16)
 	screenGui:Destroy()
 end)
 
 -----------------------
--- DRAGGING (SMOOTHISH)
+-- DRAGGING
 -----------------------
 local dragging = false
 local dragStart
@@ -226,11 +224,11 @@ contentFrame.BackgroundTransparency = 1
 contentFrame.Parent = mainFrame
 
 -----------------------
--- SIDEBAR TABS
+-- SIDEBAR
 -----------------------
 local sidebar = Instance.new("Frame")
 sidebar.Name = "Sidebar"
-sidebar.Size = UDim2.new(0, 180, 1, 0)
+sidebar.Size = UDim2.new(0, SIDEBAR_WIDTH, 1, 0)
 sidebar.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 sidebar.BorderSizePixel = 0
 sidebar.Parent = contentFrame
@@ -253,23 +251,13 @@ sidebarList.VerticalAlignment = Enum.VerticalAlignment.Top
 sidebarList.Padding = UDim.new(0, 6)
 sidebarList.Parent = sidebar
 
-local tabs = {
-	"Home",
-	"Combat",
-	"Unlimited Slaps",
-	"Anti Fling",
-	"Anti Void",
-	"Misc",
-	"Players",
-}
-
-local pages = {}
-local tabButtons = {}
-
+-----------------------
+-- PAGES CONTAINER
+-----------------------
 local pageContainer = Instance.new("Frame")
 pageContainer.Name = "PageContainer"
-pageContainer.Size = UDim2.new(1, -180, 1, -20)
-pageContainer.Position = UDim2.new(0, 190, 0, 10)
+pageContainer.Size = UDim2.new(1, -SIDEBAR_WIDTH - (PAGE_MARGIN * 2), 1, -20)
+pageContainer.Position = UDim2.new(0, SIDEBAR_WIDTH + PAGE_MARGIN, 0, 10)
 pageContainer.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 pageContainer.BorderSizePixel = 0
 pageContainer.Parent = contentFrame
@@ -285,6 +273,18 @@ pagePadding.PaddingRight = UDim.new(0, 16)
 pagePadding.PaddingBottom = UDim.new(0, 16)
 pagePadding.Parent = pageContainer
 
+-----------------------
+-- TABS / PAGES
+-----------------------
+local tabs = {
+	"AI Control",
+	"AI Output",
+	"GUI Appearance",
+}
+
+local pages = {}
+local tabButtons = {}
+
 local function createPage(name)
 	local page = Instance.new("Frame")
 	page.Name = name .. "Page"
@@ -293,6 +293,19 @@ local function createPage(name)
 	page.Visible = false
 	page.Parent = pageContainer
 	pages[name] = page
+
+	-- Simple heading for each page (rest will stay empty for now)
+	local title = Instance.new("TextLabel")
+	title.Name = "PageTitle"
+	title.BackgroundTransparency = 1
+	title.Size = UDim2.new(1, 0, 0, 32)
+	title.Font = Enum.Font.GothamBold
+	title.TextSize = 24
+	title.TextXAlignment = Enum.TextXAlignment.Left
+	title.TextColor3 = Color3.fromRGB(255, 255, 255)
+	title.Text = name
+	title.Parent = page
+
 	return page
 end
 
@@ -320,7 +333,6 @@ local function createTabButton(name)
 	stroke.Thickness = 1
 	stroke.Parent = btn
 
-	-- Hover animation
 	btn.MouseEnter:Connect(function()
 		if pages[name] and pages[name].Visible then return end
 		TweenService:Create(btn, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
@@ -373,255 +385,19 @@ local function setActiveTab(name)
 	end
 end
 
--- Create all tabs + empty pages
+-- Build tabs + pages
 for _, name in ipairs(tabs) do
 	local btn = createTabButton(name)
-	local page = createPage(name)
+	createPage(name)
 
 	btn.MouseButton1Click:Connect(function()
 		setActiveTab(name)
 	end)
-
-	-- Basic placeholder text for non-Combat pages
-	if name ~= "Combat" then
-		local label = Instance.new("TextLabel")
-		label.Size = UDim2.new(1, 0, 0, 30)
-		label.BackgroundTransparency = 1
-		label.Font = Enum.Font.GothamSemibold
-		label.TextSize = 20
-		label.TextColor3 = Color3.fromRGB(255, 255, 255)
-		label.TextXAlignment = Enum.TextXAlignment.Left
-		label.Text = name
-		label.Parent = page
-	end
 end
-
------------------------
--- COMBAT PAGE CONTENT
------------------------
-local combatPage = pages["Combat"]
-
--- Title
-local combatTitle = Instance.new("TextLabel")
-combatTitle.Name = "CombatTitle"
-combatTitle.BackgroundTransparency = 1
-combatTitle.Size = UDim2.new(1, 0, 0, 32)
-combatTitle.Font = Enum.Font.GothamBold
-combatTitle.TextSize = 24
-combatTitle.TextXAlignment = Enum.TextXAlignment.Left
-combatTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
-combatTitle.Text = "Combat"
-combatTitle.Parent = combatPage
-
------------------------
--- AURA COOLDOWN PANEL
------------------------
-local auraPanel = Instance.new("Frame")
-auraPanel.Name = "AuraPanel"
-auraPanel.Size = UDim2.new(1, 0, 0, 120)
-auraPanel.Position = UDim2.new(0, 0, 0, 48)
-auraPanel.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-auraPanel.BorderSizePixel = 0
-auraPanel.Parent = combatPage
-
-local auraCorner = Instance.new("UICorner")
-auraCorner.CornerRadius = UDim.new(0, 10)
-auraCorner.Parent = auraPanel
-
-local auraStroke = Instance.new("UIStroke")
-auraStroke.Color = Color3.fromRGB(255, 255, 255)
-auraStroke.Transparency = 0.8
-auraStroke.Thickness = 1
-auraStroke.Parent = auraPanel
-
-local auraPadding = Instance.new("UIPadding")
-auraPadding.PaddingTop = UDim.new(0, 10)
-auraPadding.PaddingLeft = UDim.new(0, 12)
-auraPadding.PaddingRight = UDim.new(0, 12)
-auraPadding.Parent = auraPanel
-
-local auraTitle = Instance.new("TextLabel")
-auraTitle.BackgroundTransparency = 1
-auraTitle.Size = UDim2.new(0.6, 0, 0, 24)
-auraTitle.Font = Enum.Font.GothamSemibold
-auraTitle.TextSize = 18
-auraTitle.TextXAlignment = Enum.TextXAlignment.Left
-auraTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
-auraTitle.Text = "Aura Cooldown"
-auraTitle.Parent = auraPanel
-
-local auraDesc = Instance.new("TextLabel")
-auraDesc.BackgroundTransparency = 1
-auraDesc.Position = UDim2.new(0, 0, 0, 26)
-auraDesc.Size = UDim2.new(1, 0, 0, 18)
-auraDesc.Font = Enum.Font.Gotham
-auraDesc.TextSize = 14
-auraDesc.TextXAlignment = Enum.TextXAlignment.Left
-auraDesc.TextColor3 = Color3.fromRGB(200, 200, 200)
-auraDesc.Text = "Adjust how quickly the aura can trigger between hits."
-auraDesc.Parent = auraPanel
-
-local auraValueLabel = Instance.new("TextLabel")
-auraValueLabel.BackgroundTransparency = 1
-auraValueLabel.AnchorPoint = Vector2.new(1, 0)
-auraValueLabel.Position = UDim2.new(1, 0, 0, 0)
-auraValueLabel.Size = UDim2.new(0, 80, 0, 24)
-auraValueLabel.Font = Enum.Font.GothamBold
-auraValueLabel.TextSize = 18
-auraValueLabel.TextXAlignment = Enum.TextXAlignment.Right
-auraValueLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-auraValueLabel.Text = "0.70"
-auraValueLabel.Parent = auraPanel
-
--- Slider
-local sliderFrame = Instance.new("Frame")
-sliderFrame.Name = "SliderFrame"
-sliderFrame.Size = UDim2.new(1, -10, 0, 30)
-sliderFrame.Position = UDim2.new(0, 0, 0, 58)
-sliderFrame.BackgroundTransparency = 1
-sliderFrame.Parent = auraPanel
-
-local sliderTrack = Instance.new("Frame")
-sliderTrack.Name = "SliderTrack"
-sliderTrack.AnchorPoint = Vector2.new(0.5, 0.5)
-sliderTrack.Position = UDim2.new(0.5, 0, 0.5, 0)
-sliderTrack.Size = UDim2.new(1, -40, 0, 4)
-sliderTrack.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-sliderTrack.BorderSizePixel = 0
-sliderTrack.Parent = sliderFrame
-
-local trackCorner = Instance.new("UICorner")
-trackCorner.CornerRadius = UDim.new(1, 0)
-trackCorner.Parent = sliderTrack
-
-local sliderKnob = Instance.new("ImageButton")
-sliderKnob.Name = "SliderKnob"
-sliderKnob.AnchorPoint = Vector2.new(0.5, 0.5)
-sliderKnob.Size = UDim2.new(0, 18, 0, 18)
-sliderKnob.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-sliderKnob.BorderSizePixel = 0
-sliderKnob.AutoButtonColor = false
-sliderKnob.Image = ""
-sliderKnob.Position = UDim2.new(0.7, 0, 0.5, 0) -- default position
-sliderKnob.Parent = sliderTrack
-
-local knobCorner = Instance.new("UICorner")
-knobCorner.CornerRadius = UDim.new(1, 0)
-knobCorner.Parent = sliderKnob
-
-local knobStroke = Instance.new("UIStroke")
-knobStroke.Color = Color3.fromRGB(255, 255, 255)
-knobStroke.Thickness = 1
-knobStroke.Transparency = 0.2
-knobStroke.Parent = sliderKnob
-
-local auraValue = 0.70
-local sliderMin, sliderMax = 0.10, 2.00
-
-local function setAuraValueFromAlpha(alpha)
-	alpha = math.clamp(alpha, 0, 1)
-	local value = sliderMin + (sliderMax - sliderMin) * alpha
-	-- round to .01
-	value = math.floor(value * 100 + 0.5) / 100
-	auraValue = value
-	auraValueLabel.Text = string.format("%.2f", value)
-
-	TweenService:Create(sliderKnob, TweenInfo.new(0.08, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-		Position = UDim2.new(alpha, 0, 0.5, 0)
-	}):Play()
-end
-
-local sliding = false
-
-local function getAlphaFromInput(xPos)
-	local absPos = sliderTrack.AbsolutePosition
-	local absSize = sliderTrack.AbsoluteSize
-	local rel = (xPos - absPos.X) / absSize.X
-	return rel
-end
-
-sliderKnob.MouseButton1Down:Connect(function()
-	sliding = true
-end)
-
-sliderTrack.InputBegan:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 then
-		sliding = true
-		setAuraValueFromAlpha(getAlphaFromInput(input.Position.X))
-	end
-end)
-
-UserInputService.InputChanged:Connect(function(input)
-	if not sliding then return end
-	if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-		setAuraValueFromAlpha(getAlphaFromInput(input.Position.X))
-	end
-end)
-
-UserInputService.InputEnded:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-		sliding = false
-	end
-end)
-
--- Initial slider state
-setAuraValueFromAlpha((auraValue - sliderMin) / (sliderMax - sliderMin))
-
------------------------
--- WARNING PANEL
------------------------
-local warningPanel = Instance.new("Frame")
-warningPanel.Name = "WarningPanel"
-warningPanel.Size = UDim2.new(1, 0, 0, 110)
-warningPanel.Position = UDim2.new(0, 0, 0, 180)
-warningPanel.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-warningPanel.BorderSizePixel = 0
-warningPanel.Parent = combatPage
-
-local warningCorner = Instance.new("UICorner")
-warningCorner.CornerRadius = UDim.new(0, 10)
-warningCorner.Parent = warningPanel
-
-local warningStroke = Instance.new("UIStroke")
-warningStroke.Color = Color3.fromRGB(255, 255, 255)
-warningStroke.Transparency = 0.8
-warningStroke.Thickness = 1
-warningStroke.Parent = warningPanel
-
-local warningPadding = Instance.new("UIPadding")
-warningPadding.PaddingTop = UDim.new(0, 10)
-warningPadding.PaddingLeft = UDim.new(0, 12)
-warningPadding.PaddingRight = UDim.new(0, 12)
-warningPadding.Parent = warningPanel
-
-local warningTitle = Instance.new("TextLabel")
-warningTitle.Name = "WarningTitle"
-warningTitle.BackgroundTransparency = 1
-warningTitle.Size = UDim2.new(1, 0, 0, 24)
-warningTitle.Font = Enum.Font.GothamSemibold
-warningTitle.TextSize = 18
-warningTitle.TextXAlignment = Enum.TextXAlignment.Left
-warningTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
-warningTitle.Text = "Warning"
-warningTitle.Parent = warningPanel
-
-local warningText = Instance.new("TextLabel")
-warningText.Name = "WarningText"
-warningText.BackgroundTransparency = 1
-warningText.Position = UDim2.new(0, 0, 0, 26)
-warningText.Size = UDim2.new(1, 0, 1, -28)
-warningText.Font = Enum.Font.Gotham
-warningText.TextSize = 14
-warningText.TextWrapped = true
-warningText.TextXAlignment = Enum.TextXAlignment.Left
-warningText.TextYAlignment = Enum.TextYAlignment.Top
-warningText.TextColor3 = Color3.fromRGB(230, 230, 230)
-warningText.Text = "HITTING MULTIPLE PLAYERS TOO QUICKLY CAN BE DETECTED AND MAY RESULT IN A KICK. USE AURA SETTINGS RESPONSIBLY."
-warningText.Parent = warningPanel
 
 -----------------------
 -- DEFAULT ACTIVE TAB
 -----------------------
-setActiveTab("Combat")
+setActiveTab("AI Control")
 
--- Done: LightAI GUI only (no AI yet)
+-- LightAI GUI ready (no AI logic yet)
