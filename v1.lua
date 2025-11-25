@@ -28,27 +28,24 @@ local localPlayer = Players.LocalPlayer or Players:GetPlayers()[1]
 -----------------------
 local CHAT_INSTRUCTIONS = "You are LightAI, a friendly assistant inside a Roblox GUI. Speak casually, like a normal player. You must still follow safety rules and refuse anything harmful or NSFW, but for normal questions answer directly and naturally."
 
-local CONTROL_INSTRUCTIONS = [[You control the player's Roblox character.
+local CONTROL_INSTRUCTIONS = [[You are controlling a Roblox player.
 
-You MUST respond ONLY with a single JSON object and NOTHING ELSE.
-Do not write "Commands:", "Here is the JSON", code blocks, or explanations.
+ONLY OUTPUT JSON. NOTHING ELSE.
 
-Correct format (no comments):
+Valid actions:
+- MOVE: forward, back, left, right, time (0.1 to 2.0 seconds)
+- JUMP
+- CLICK
+- LOOK: x (pixels), y (pixels)
+
+FORMAT (no extra text):
 
 {"actions":[
   {"type":"MOVE","direction":"forward","time":0.5},
-  {"type":"JUMP"}
-]}
-
-Rules:
-- action types: "MOVE", "JUMP"
-- MOVE:
-  - "direction": "forward","back","left","right"
-  - "time": seconds of movement, between 0.1 and 2.0 (if missing, assume 0.5)
-- JUMP:
-  - {"type":"JUMP"}
-
-Again: output ONLY the JSON object. No extra text.]]
+  {"type":"JUMP"},
+  {"type":"LOOK","x":10,"y":-5},
+  {"type":"CLICK"}
+]}]]
 
 
 local AI = {
@@ -179,64 +176,75 @@ local function httpPostJson(url, jsonBody)
 end
 
 -----------------------
--- CHARACTER CONTROL HELPERS
+-- CHARACTER CONTROL HELPERS (CLEAN + VIM-ONLY)
 -----------------------
-local function getHumanoid()
-    local character = localPlayer.Character or localPlayer.CharacterAdded:Wait()
-    local humanoid = character:FindFirstChildOfClass("Humanoid")
-    return character, humanoid
+
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local Players = game:GetService("Players")
+
+local player = Players.LocalPlayer
+
+-------------------------------------------------
+-- KEY PRESS HELPERS
+-------------------------------------------------
+
+local function pressKey(keycode, time)
+    time = tonumber(time) or 0.3
+    VirtualInputManager:SendKeyEvent(true, keycode, false, game)
+    task.wait(time)
+    VirtualInputManager:SendKeyEvent(false, keycode, false, game)
 end
 
-local function moveDirection(direction, duration)
-    local _, humanoid = getHumanoid()
-    if not humanoid then return end
-
-    duration = math.clamp(duration or 0.5, 0.1, 2)
-
-    local dirVector
-    if direction == "forward" then
-        dirVector = Vector3.new(0, 0, -1)
-    elseif direction == "back" then
-        dirVector = Vector3.new(0, 0, 1)
-    elseif direction == "left" then
-        dirVector = Vector3.new(-1, 0, 0)
-    elseif direction == "right" then
-        dirVector = Vector3.new(1, 0, 0)
-    else
-        return
-    end
-
-    local startTime = tick()
-    while tick() - startTime < duration do
-        humanoid:Move(dirVector, true) -- relative to camera
-        RunService.Heartbeat:Wait()
-    end
-    humanoid:Move(Vector3.new(0, 0, 0), true)
+local function pressMouse(time)
+    time = tonumber(time) or 0.1
+    VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 0)
+    task.wait(time)
+    VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 0)
 end
 
-local function doJump()
-    local _, humanoid = getHumanoid()
-    if humanoid then
-        humanoid.Jump = true
+local function moveMouse(dx, dy)
+    dx = tonumber(dx) or 0
+    dy = tonumber(dy) or 0
+
+    -- Try both modes (some executors use absolute, others delta)
+    local ok = pcall(function()
+        VirtualInputManager:SendMouseMoveEvent(dx, dy, true)
+    end)
+
+    if not ok then
+        VirtualInputManager:SendMouseMoveEvent(dx, dy, false)
     end
 end
 
-local function executeAction(action)
-    if type(action) ~= "table" then return end
-    local t = action.type
-    if t == "MOVE" then
-        local dir = string.lower(action.direction or "forward")
-        local time = tonumber(action.time) or 0.5
-        moveDirection(dir, time)
-    elseif t == "JUMP" then
-        doJump()
-    end
-end
+-------------------------------------------------
+-- MAIN ACTION EXECUTION
+-------------------------------------------------
 
-local function executeActions(actions)
+function executeActions(actions)
     if type(actions) ~= "table" then return end
-    for _, act in ipairs(actions) do
-        executeAction(act)
+
+    for _, action in ipairs(actions) do
+        local t = action.type
+
+        if t == "MOVE" then
+            local dir = (action.direction or ""):lower()
+            local time = tonumber(action.time) or 0.5
+
+            if dir == "forward" then pressKey(Enum.KeyCode.W, time)
+            elseif dir == "back" then pressKey(Enum.KeyCode.S, time)
+            elseif dir == "left" then pressKey(Enum.KeyCode.A, time)
+            elseif dir == "right" then pressKey(Enum.KeyCode.D, time)
+            end
+
+        elseif t == "JUMP" then
+            pressKey(Enum.KeyCode.Space, 0.1)
+
+        elseif t == "CLICK" then
+            pressMouse(0.1)
+
+        elseif t == "LOOK" then
+            moveMouse(action.x, action.y)
+        end
     end
 end
 
