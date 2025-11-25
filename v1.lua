@@ -2,7 +2,7 @@
     LightAI - GUI + Chat + Character Control (Cohere)
 
     - Cohere API key is read from getgenv().LIGHTAI_KEY
-    - No secrets are stored in the script / GitHub
+    - No secrets are stored in the script
 ]]
 
 -----------------------
