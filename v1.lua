@@ -1,7 +1,11 @@
--- LightAI Controller GUI - Windows 11 Style
+-- LightAI Controller - Premium Black & White Design
 -- Copy and paste this entire script into Roblox Studio command bar
 
 local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
@@ -10,15 +14,17 @@ if playerGui:FindFirstChild("LightAIController") then
     playerGui.LightAIController:Destroy()
 end
 
--- Color scheme
+-- Color scheme - Black, White, Gray only
 local colors = {
-    background = Color3.fromRGB(32, 32, 32),
-    surface = Color3.fromRGB(40, 40, 40),
-    surfaceLighter = Color3.fromRGB(48, 48, 48),
-    accent = Color3.fromRGB(0, 120, 215),
-    textPrimary = Color3.fromRGB(240, 240, 240),
-    textSecondary = Color3.fromRGB(180, 180, 180),
-    divider = Color3.fromRGB(55, 55, 55)
+    background = Color3.fromRGB(15, 15, 15),
+    surface = Color3.fromRGB(25, 25, 25),
+    surfaceLight = Color3.fromRGB(40, 40, 40),
+    surfaceLighter = Color3.fromRGB(60, 60, 60),
+    textPrimary = Color3.fromRGB(255, 255, 255),
+    textSecondary = Color3.fromRGB(200, 200, 200),
+    textTertiary = Color3.fromRGB(150, 150, 150),
+    accent = Color3.fromRGB(255, 255, 255),
+    divider = Color3.fromRGB(50, 50, 50)
 }
 
 -- Create main ScreenGui
@@ -30,349 +36,363 @@ screenGui.Parent = playerGui
 -- Main window container
 local mainWindow = Instance.new("Frame")
 mainWindow.Name = "MainWindow"
-mainWindow.Size = UDim2.new(0, 700, 0, 500)
-mainWindow.Position = UDim2.new(0.5, -350, 0.5, -250)
+mainWindow.Size = UDim2.new(0, 900, 0, 650)
+mainWindow.Position = UDim2.new(0.5, -450, 0.5, -325)
 mainWindow.BackgroundColor3 = colors.background
-mainWindow.BackgroundTransparency = 0.1 -- Slight transparency
+mainWindow.BackgroundTransparency = 0
 mainWindow.BorderSizePixel = 0
+mainWindow.ClipsDescendants = true
 mainWindow.Parent = screenGui
 
 -- Main window corner rounding
 local mainCorner = Instance.new("UICorner")
-mainCorner.CornerRadius = UDim.new(0, 8)
+mainCorner.CornerRadius = UDim.new(0, 12)
 mainCorner.Parent = mainWindow
-
--- Drop shadow effect
-local shadow = Instance.new("ImageLabel")
-shadow.Name = "Shadow"
-shadow.Size = UDim2.new(1, 10, 1, 10)
-shadow.Position = UDim2.new(0, -5, 0, -5)
-shadow.BackgroundTransparency = 1
-shadow.Image = "rbxassetid://5554236805" -- Soft shadow image
-shadow.ScaleType = Enum.ScaleType.Slice
-shadow.SliceCenter = Rect.new(10, 10, 118, 118)
-shadow.Parent = mainWindow
-shadow.ZIndex = -1
 
 -- Title Bar
 local titleBar = Instance.new("Frame")
 titleBar.Name = "TitleBar"
-titleBar.Size = UDim2.new(1, 0, 0, 32)
+titleBar.Size = UDim2.new(1, 0, 0, 45)
 titleBar.Position = UDim2.new(0, 0, 0, 0)
 titleBar.BackgroundColor3 = colors.surface
 titleBar.BorderSizePixel = 0
 titleBar.Parent = mainWindow
 
 local titleBarCorner = Instance.new("UICorner")
-titleBarCorner.CornerRadius = UDim.new(0, 8)
+titleBarCorner.CornerRadius = UDim.new(0, 12)
 titleBarCorner.Parent = titleBar
 
 -- Title text
 local titleText = Instance.new("TextLabel")
 titleText.Name = "TitleText"
 titleText.Size = UDim2.new(0, 300, 1, 0)
-titleText.Position = UDim2.new(0, 10, 0, 0)
+titleText.Position = UDim2.new(0, 20, 0, 0)
 titleText.BackgroundTransparency = 1
-titleText.Text = "🌟 LightAI Controller | Slap Battles 🌟"
+titleText.Text = "LightAI Controller"
 titleText.TextColor3 = colors.textPrimary
-titleText.TextSize = 12
-titleText.Font = Enum.Font.GothamSemibold
+titleText.TextSize = 18
+titleText.Font = Enum.Font.GothamBold
 titleText.TextXAlignment = Enum.TextXAlignment.Left
 titleText.Parent = titleBar
 
--- Window controls (minimize, maximize, close)
-local windowControls = Instance.new("Frame")
-windowControls.Name = "WindowControls"
-windowControls.Size = UDim2.new(0, 90, 1, 0)
-windowControls.Position = UDim2.new(1, -90, 0, 0)
-windowControls.BackgroundTransparency = 1
-windowControls.Parent = titleBar
-
-local minimizeBtn = Instance.new("TextButton")
-minimizeBtn.Name = "MinimizeBtn"
-minimizeBtn.Size = UDim2.new(0, 30, 1, 0)
-minimizeBtn.Position = UDim2.new(0, 0, 0, 0)
-minimizeBtn.BackgroundTransparency = 1
-minimizeBtn.Text = "─"
-minimizeBtn.TextColor3 = colors.textPrimary
-minimizeBtn.TextSize = 14
-minimizeBtn.Font = Enum.Font.GothamBold
-minimizeBtn.Parent = windowControls
-
-local maximizeBtn = Instance.new("TextButton")
-maximizeBtn.Name = "MaximizeBtn"
-maximizeBtn.Size = UDim2.new(0, 30, 1, 0)
-maximizeBtn.Position = UDim2.new(0, 30, 0, 0)
-maximizeBtn.BackgroundTransparency = 1
-maximizeBtn.Text = "□"
-maximizeBtn.TextColor3 = colors.textPrimary
-maximizeBtn.TextSize = 12
-maximizeBtn.Font = Enum.Font.GothamBold
-maximizeBtn.Parent = windowControls
-
+-- Close button with smooth hover
 local closeBtn = Instance.new("TextButton")
 closeBtn.Name = "CloseBtn"
-closeBtn.Size = UDim2.new(0, 30, 1, 0)
-closeBtn.Position = UDim2.new(0, 60, 0, 0)
-closeBtn.BackgroundTransparency = 1
-closeBtn.Text = "×"
-closeBtn.TextColor3 = colors.textPrimary
+closeBtn.Size = UDim2.new(0, 32, 0, 32)
+closeBtn.Position = UDim2.new(1, -40, 0, 6)
+closeBtn.BackgroundColor3 = colors.surface
+closeBtn.TextColor3 = colors.textSecondary
 closeBtn.TextSize = 16
+closeBtn.Text = "×"
 closeBtn.Font = Enum.Font.GothamBold
-closeBtn.Parent = windowControls
+closeBtn.Parent = titleBar
 
--- Main content area (sidebar + content)
+local closeCorner = Instance.new("UICorner")
+closeCorner.CornerRadius = UDim.new(0, 6)
+closeCorner.Parent = closeBtn
+
+-- Main content area
 local contentArea = Instance.new("Frame")
 contentArea.Name = "ContentArea"
-contentArea.Size = UDim2.new(1, 0, 1, -32)
-contentArea.Position = UDim2.new(0, 0, 0, 32)
+contentArea.Size = UDim2.new(1, 0, 1, -45)
+contentArea.Position = UDim2.new(0, 0, 0, 45)
 contentArea.BackgroundTransparency = 1
 contentArea.Parent = mainWindow
 
--- Sidebar
+-- Sidebar Navigation
 local sidebar = Instance.new("Frame")
 sidebar.Name = "Sidebar"
-sidebar.Size = UDim2.new(0, 160, 1, 0)
+sidebar.Size = UDim2.new(0, 220, 1, 0)
 sidebar.Position = UDim2.new(0, 0, 0, 0)
 sidebar.BackgroundColor3 = colors.surface
 sidebar.BorderSizePixel = 0
 sidebar.Parent = contentArea
 
 local sidebarCorner = Instance.new("UICorner")
-sidebarCorner.CornerRadius = UDim.new(0, 8)
+sidebarCorner.CornerRadius = UDim.new(0, 12)
 sidebarCorner.Parent = sidebar
 
 -- Sidebar navigation items
 local navItems = {
-    {Name = "Home", Icon = "🏠"},
-    {Name = "Combat", Icon = "⚔️"},
-    {Name = "Learning", Icon = "🧠"},
-    {Name = "Settings", Icon = "⚙️"},
-    {Name = "Players", Icon = "👥"}
+    {Name = "Dashboard", Icon = "📊"},
+    {Name = "AI Learning", Icon = "🧠"}, 
+    {Name = "Combat Settings", Icon = "⚔️"},
+    {Name = "Configuration", Icon = "⚙️"},
+    {Name = "Player Data", Icon = "👥"}
 }
 
-local selectedNav = "Learning"
+local currentPage = "AI Learning"
 local navButtons = {}
+
+-- Create smooth selection indicator
+local selectionIndicator = Instance.new("Frame")
+selectionIndicator.Name = "SelectionIndicator"
+selectionIndicator.Size = UDim2.new(0, 4, 0, 40)
+selectionIndicator.Position = UDim2.new(1, -2, 0, 10)
+selectionIndicator.BackgroundColor3 = colors.accent
+selectionIndicator.BorderSizePixel = 0
+selectionIndicator.Visible = false
+selectionIndicator.Parent = sidebar
+
+local indicatorCorner = Instance.new("UICorner")
+indicatorCorner.CornerRadius = UDim.new(0, 2)
+indicatorCorner.Parent = selectionIndicator
 
 for i, item in ipairs(navItems) do
     local navButton = Instance.new("TextButton")
-    navButton.Name = item.Name .. "Nav"
-    navButton.Size = UDim2.new(1, -10, 0, 36)
-    navButton.Position = UDim2.new(0, 5, 0, 10 + (i-1) * 40)
+    navButton.Name = item.Name .. "Button"
+    navButton.Size = UDim2.new(1, -10, 0, 50)
+    navButton.Position = UDim2.new(0, 5, 0, 15 + (i-1) * 55)
     navButton.BackgroundColor3 = colors.surface
-    navButton.Text = "   " .. item.Icon .. "  " .. item.Name
+    navButton.Text = "    " .. item.Name
     navButton.TextColor3 = colors.textSecondary
-    navButton.TextSize = 12
-    navButton.Font = Enum.Font.Gotham
+    navButton.TextSize = 14
+    navButton.Font = Enum.Font.GothamSemibold
     navButton.TextXAlignment = Enum.TextXAlignment.Left
     navButton.Parent = sidebar
     
     local navCorner = Instance.new("UICorner")
-    navCorner.CornerRadius = UDim.new(0, 6)
+    navCorner.CornerRadius = UDim.new(0, 8)
     navCorner.Parent = navButton
     
-    navButton.MouseButton1Click:Connect(function()
-        selectedNav = item.Name
-        updateNavigation()
-        updateContent()
+    -- Icon label
+    local iconLabel = Instance.new("TextLabel")
+    iconLabel.Name = "Icon"
+    iconLabel.Size = UDim2.new(0, 30, 0, 30)
+    iconLabel.Position = UDim2.new(0, 10, 0, 10)
+    iconLabel.BackgroundTransparency = 1
+    iconLabel.Text = item.Icon
+    iconLabel.TextColor3 = colors.textSecondary
+    iconLabel.TextSize = 16
+    iconLabel.Font = Enum.Font.Gotham
+    iconLabel.Parent = navButton
+    
+    -- Hover animation
+    navButton.MouseEnter:Connect(function()
+        if currentPage ~= item.Name then
+            animateButtonHover(navButton, true)
+        end
     end)
     
-    table.insert(navButtons, navButton)
+    navButton.MouseLeave:Connect(function()
+        if currentPage ~= item.Name then
+            animateButtonHover(navButton, false)
+        end
+    end)
+    
+    navButton.MouseButton1Click:Connect(function()
+        switchPage(item.Name, navButton)
+    end)
+    
+    table.insert(navButtons, {button = navButton, name = item.Name})
+    
+    -- Set initial active state
+    if item.Name == currentPage then
+        navButton.BackgroundColor3 = colors.surfaceLight
+        navButton.TextColor3 = colors.textPrimary
+        iconLabel.TextColor3 = colors.textPrimary
+        selectionIndicator.Visible = true
+        selectionIndicator.Position = UDim2.new(1, -2, 0, navButton.Position.Y.Offset)
+    end
 end
 
 -- Main content frame
 local contentFrame = Instance.new("Frame")
 contentFrame.Name = "ContentFrame"
-contentFrame.Size = UDim2.new(1, -160, 1, 0)
-contentFrame.Position = UDim2.new(0, 160, 0, 0)
+contentFrame.Size = UDim2.new(1, -220, 1, 0)
+contentFrame.Position = UDim2.new(0, 220, 0, 0)
 contentFrame.BackgroundTransparency = 1
+contentFrame.ClipsDescendants = true
 contentFrame.Parent = contentArea
 
--- Content pages
-local pages = {
-    Home = createHomePage(),
-    Combat = createCombatPage(),
-    Learning = createLearningPage(),
-    Settings = createSettingsPage(),
-    Players = createPlayersPage()
-}
+-- Create pages
+local pages = {}
 
-for name, page in pairs(pages) do
-    page.Visible = (name == selectedNav)
-    page.Parent = contentFrame
+-- Dashboard Page
+local dashboardPage = createDashboardPage()
+dashboardPage.Name = "DashboardPage"
+dashboardPage.Parent = contentFrame
+pages["Dashboard"] = dashboardPage
+
+-- AI Learning Page (Main Page)
+local aiLearningPage = createAILearningPage()
+aiLearningPage.Name = "AILearningPage"
+aiLearningPage.Parent = contentFrame
+pages["AI Learning"] = aiLearningPage
+
+-- Combat Settings Page
+local combatPage = createCombatPage()
+combatPage.Name = "CombatPage"
+combatPage.Parent = contentFrame
+pages["Combat Settings"] = combatPage
+
+-- Configuration Page
+local configPage = createConfigPage()
+configPage.Name = "ConfigPage"
+configPage.Parent = contentFrame
+pages["Configuration"] = configPage
+
+-- Player Data Page
+local playerPage = createPlayerPage()
+playerPage.Name = "PlayerPage"
+playerPage.Parent = contentFrame
+pages["Player Data"] = playerPage
+
+-- Initially show only AI Learning page
+for pageName, page in pairs(pages) do
+    page.Visible = (pageName == currentPage)
 end
 
--- Function to create home page
-function createHomePage()
+-- Function to create dashboard page
+function createDashboardPage()
     local page = Instance.new("Frame")
-    page.Name = "HomePage"
     page.Size = UDim2.new(1, 0, 1, 0)
     page.BackgroundTransparency = 1
     
-    local title = Instance.new("TextLabel")
-    title.Size = UDim2.new(1, 0, 0, 40)
-    title.Position = UDim2.new(0, 20, 0, 10)
-    title.BackgroundTransparency = 1
-    title.Text = "LightAI Dashboard"
-    title.TextColor3 = colors.textPrimary
-    title.TextSize = 24
-    title.Font = Enum.Font.GothamBold
-    title.TextXAlignment = Enum.TextXAlignment.Left
-    title.Parent = page
+    local title = createSectionTitle("Dashboard", page)
     
-    local statusCard = createCard("AI Status", UDim2.new(0, 300, 0, 120), UDim2.new(0, 20, 0, 60))
-    local statusText = Instance.new("TextLabel")
-    statusText.Size = UDim2.new(1, -20, 0.6, 0)
-    statusText.Position = UDim2.new(0, 10, 0, 40)
-    statusText.BackgroundTransparency = 1
-    statusText.Text = "Status: Ready\nMode: Balanced"
-    statusText.TextColor3 = colors.textSecondary
-    statusText.TextSize = 12
-    statusText.Font = Enum.Font.Gotham
-    statusText.TextXAlignment = Enum.TextXAlignment.Left
-    statusText.TextYAlignment = Enum.TextYAlignment.Top
-    statusText.Parent = statusCard
+    -- Stats cards
+    local statsGrid = Instance.new("Frame")
+    statsGrid.Name = "StatsGrid"
+    statsGrid.Size = UDim2.new(1, -40, 0, 120)
+    statsGrid.Position = UDim2.new(0, 20, 0, 70)
+    statsGrid.BackgroundTransparency = 1
+    statsGrid.Parent = page
+    
+    local stats = {
+        {"Learning Sessions", "12"},
+        {"Games Analyzed", "47"},
+        {"Success Rate", "89%"},
+        {"Current Mode", "Balanced"}
+    }
+    
+    for i, stat in ipairs(stats) do
+        local card = createStatCard(stat[1], stat[2], UDim2.new(0.23, 0, 0, 120), UDim2.new((i-1) * 0.25, 0, 0, 0))
+        card.Parent = statsGrid
+    end
     
     return page
 end
 
--- Function to create learning page (main AI controls)
-function createLearningPage()
+-- Function to create AI Learning page (main functionality)
+function createAILearningPage()
     local page = Instance.new("Frame")
-    page.Name = "LearningPage"
     page.Size = UDim2.new(1, 0, 1, 0)
     page.BackgroundTransparency = 1
     
-    local title = Instance.new("TextLabel")
-    title.Size = UDim2.new(1, 0, 0, 40)
-    title.Position = UDim2.new(0, 20, 0, 10)
-    title.BackgroundTransparency = 1
-    title.Text = "AI Learning Controls"
-    title.TextColor3 = colors.textPrimary
-    title.TextSize = 24
-    title.Font = Enum.Font.GothamBold
-    title.TextXAlignment = Enum.TextXAlignment.Left
-    title.Parent = page
+    local title = createSectionTitle("AI Learning Controls", page)
     
-    -- AI Mode Selection Card
-    local modeCard = createCard("Learning Mode", UDim2.new(0, 300, 0, 180), UDim2.new(0, 20, 0, 60))
+    -- Learning Mode Section
+    local modeSection = createSection("Learning Mode", UDim2.new(0, 400, 0, 200), UDim2.new(0, 20, 0, 70))
+    modeSection.Parent = page
     
     local modes = {
-        {Name = "Quick Learning", Desc = "Fast learning, focuses on main patterns"},
-        {Name = "Balanced", Desc = "Balanced between speed and depth"},
-        {Name = "Advanced Analysis", Desc = "Detailed study, deep pattern recognition"},
-        {Name = "Experimental", Desc = "Tries unconventional approaches"}
+        {"Quick Learning", "Fast adaptation, focuses on core mechanics"},
+        {"Balanced", "Optimal balance between speed and depth"},
+        {"Advanced Analysis", "Comprehensive pattern recognition"},
+        {"Experimental", "Innovative approaches and strategies"}
     }
     
     local currentMode = "Balanced"
+    local modeButtons = {}
     
     for i, mode in ipairs(modes) do
-        local modeBtn = Instance.new("TextButton")
-        modeBtn.Name = mode.Name
-        modeBtn.Size = UDim2.new(1, -20, 0, 30)
-        modeBtn.Position = UDim2.new(0, 10, 0, 30 + (i-1) * 35)
-        modeBtn.BackgroundColor3 = colors.surface
-        modeBtn.Text = mode.Name
-        modeBtn.TextColor3 = colors.textSecondary
-        modeBtn.TextSize = 11
-        modeBtn.Font = Enum.Font.Gotham
-        modeBtn.Parent = modeBtn
+        local modeButton = Instance.new("TextButton")
+        modeButton.Name = mode[1]
+        modeButton.Size = UDim2.new(1, -20, 0, 35)
+        modeButton.Position = UDim2.new(0, 10, 0, 30 + (i-1) * 42)
+        modeButton.BackgroundColor3 = colors.surface
+        modeButton.Text = mode[1]
+        modeButton.TextColor3 = colors.textSecondary
+        modeButton.TextSize = 13
+        modeButton.Font = Enum.Font.Gotham
+        modeButton.Parent = modeSection
         
-        local btnCorner = Instance.new("UICorner")
-        btnCorner.CornerRadius = UDim.new(0, 4)
-        btnCorner.Parent = modeBtn
+        local modeCorner = Instance.new("UICorner")
+        modeCorner.CornerRadius = UDim.new(0, 6)
+        modeCorner.Parent = modeButton
         
-        modeBtn.MouseButton1Click:Connect(function()
-            currentMode = mode.Name
-            -- Update button states
-            for _, btn in ipairs(modeCard:GetChildren()) do
-                if btn:IsA("TextButton") then
-                    if btn.Name == currentMode then
-                        btn.BackgroundColor3 = colors.accent
-                        btn.TextColor3 = colors.textPrimary
-                    else
-                        btn.BackgroundColor3 = colors.surface
-                        btn.TextColor3 = colors.textSecondary
-                    end
+        local descLabel = Instance.new("TextLabel")
+        descLabel.Size = UDim2.new(1, -20, 0, 14)
+        descLabel.Position = UDim2.new(0, 10, 0, 30 + (i-1) * 42 + 25)
+        descLabel.BackgroundTransparency = 1
+        descLabel.Text = mode[2]
+        descLabel.TextColor3 = colors.textTertiary
+        descLabel.TextSize = 10
+        descLabel.Font = Enum.Font.Gotham
+        descLabel.TextXAlignment = Enum.TextXAlignment.Left
+        descLabel.Parent = modeSection
+        
+        modeButton.MouseButton1Click:Connect(function()
+            currentMode = mode[1]
+            for _, btn in ipairs(modeButtons) do
+                if btn.Name == currentMode then
+                    animateSelection(btn, true)
+                    btn.TextColor3 = colors.textPrimary
+                else
+                    animateSelection(btn, false)
+                    btn.TextColor3 = colors.textSecondary
                 end
             end
         end)
         
-        modeBtn.Parent = modeCard
+        table.insert(modeButtons, modeButton)
+        
+        if mode[1] == currentMode then
+            modeButton.BackgroundColor3 = colors.surfaceLight
+            modeButton.TextColor3 = colors.textPrimary
+        end
     end
     
-    -- Initialize first button as selected
-    if modeCard:FindFirstChild("Balanced") then
-        modeCard.Balanced.BackgroundColor3 = colors.accent
-        modeCard.Balanced.TextColor3 = colors.textPrimary
-    end
-    
-    -- Instructions Card
-    local instructionsCard = createCard("AI Instructions", UDim2.new(0, 300, 0, 150), UDim2.new(0, 20, 0, 260))
+    -- Instructions Section
+    local instructionsSection = createSection("AI Instructions", UDim2.new(0, 400, 0, 180), UDim2.new(0, 20, 0, 290))
+    instructionsSection.Parent = page
     
     local instructionsBox = Instance.new("TextBox")
     instructionsBox.Size = UDim2.new(1, -20, 1, -50)
     instructionsBox.Position = UDim2.new(0, 10, 0, 30)
-    instructionsBox.BackgroundColor3 = colors.surfaceLighter
+    instructionsBox.BackgroundColor3 = colors.surface
     instructionsBox.TextColor3 = colors.textPrimary
-    instructionsBox.PlaceholderText = "Enter instructions for the AI..."
-    instructionsBox.TextSize = 11
+    instructionsBox.PlaceholderText = "Provide instructions, strategies, or goals for the AI..."
+    instructionsBox.TextSize = 12
     instructionsBox.Font = Enum.Font.Gotham
     instructionsBox.TextWrapped = true
     instructionsBox.ClearTextOnFocus = false
     instructionsBox.MultiLine = true
     instructionsBox.Text = ""
-    instructionsBox.Parent = instructionsCard
+    instructionsBox.Parent = instructionsSection
     
     local boxCorner = Instance.new("UICorner")
-    boxCorner.CornerRadius = UDim.new(0, 4)
+    boxCorner.CornerRadius = UDim.new(0, 6)
     boxCorner.Parent = instructionsBox
     
-    -- Control Buttons Card
-    local controlCard = createCard("AI Controls", UDim2.new(0, 300, 0, 80), UDim2.new(0, 20, 0, 430))
+    -- Control Section
+    local controlSection = createSection("AI Controls", UDim2.new(0, 400, 0, 100), UDim2.new(0, 20, 0, 490))
+    controlSection.Parent = page
     
-    local startBtn = Instance.new("TextButton")
-    startBtn.Name = "StartBtn"
-    startBtn.Size = UDim2.new(0.45, 0, 0, 32)
-    startBtn.Position = UDim2.new(0.025, 0, 0, 35)
-    startBtn.BackgroundColor3 = Color3.fromRGB(0, 180, 80)
-    startBtn.Text = "START AI"
-    startBtn.TextColor3 = colors.textPrimary
-    startBtn.TextSize = 12
-    startBtn.Font = Enum.Font.GothamBold
-    startBtn.Parent = controlCard
+    local startBtn = createControlButton("START AI LEARNING", UDim2.new(0, 10, 0, 30), UDim2.new(0.48, -5, 0, 50))
+    startBtn.BackgroundColor3 = colors.surfaceLight
+    startBtn.Parent = controlSection
     
-    local stopBtn = Instance.new("TextButton")
-    stopBtn.Name = "StopBtn"
-    stopBtn.Size = UDim2.new(0.45, 0, 0, 32)
-    stopBtn.Position = UDim2.new(0.525, 0, 0, 35)
-    stopBtn.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
-    stopBtn.Text = "STOP AI"
-    stopBtn.TextColor3 = colors.textPrimary
-    stopBtn.TextSize = 12
-    stopBtn.Font = Enum.Font.GothamBold
-    stopBtn.Parent = controlCard
+    local stopBtn = createControlButton("STOP AI", UDim2.new(0.52, 5, 0, 30), UDim2.new(0.48, -5, 0, 50))
+    stopBtn.BackgroundColor3 = colors.surfaceLight
+    stopBtn.Parent = controlSection
     
-    local btnCorner = Instance.new("UICorner")
-    btnCorner.CornerRadius = UDim.new(0, 6)
-    btnCorner.Parent = startBtn
-    btnCorner:Clone().Parent = stopBtn
+    -- Status Section
+    local statusSection = createSection("System Status", UDim2.new(0, 400, 0, 120), UDim2.new(0, 440, 0, 70))
+    statusSection.Parent = page
     
-    -- Warning Card
-    local warningCard = createCard("Warning", UDim2.new(0, 300, 0, 80), UDim2.new(0, 340, 0, 60))
-    warningCard.BackgroundColor3 = Color3.fromRGB(40, 30, 30)
-    
-    local warningText = Instance.new("TextLabel")
-    warningText.Size = UDim2.new(1, -20, 1, -30)
-    warningText.Position = UDim2.new(0, 10, 0, 25)
-    warningText.BackgroundTransparency = 1
-    warningText.Text = "MAKE SURE TO CONFIGURE AI SETTINGS BEFORE STARTING. IMPROPER CONFIGURATION MAY LEAD TO UNEXPECTED BEHAVIOR."
-    warningText.TextColor3 = Color3.fromRGB(255, 100, 100)
-    warningText.TextSize = 10
-    warningText.Font = Enum.Font.GothamBold
-    warningText.TextWrapped = true
-    warningText.TextYAlignment = Enum.TextYAlignment.Top
-    warningText.Parent = warningCard
+    local statusText = Instance.new("TextLabel")
+    statusText.Size = UDim2.new(1, -20, 1, -40)
+    statusText.Position = UDim2.new(0, 10, 0, 30)
+    statusText.BackgroundTransparency = 1
+    statusText.Text = "Status: Ready\nCurrent Mode: Balanced\nLearning Sessions: 12\nSuccess Rate: 89%"
+    statusText.TextColor3 = colors.textSecondary
+    statusText.TextSize = 12
+    statusText.Font = Enum.Font.Gotham
+    statusText.TextXAlignment = Enum.TextXAlignment.Left
+    statusText.TextYAlignment = Enum.TextYAlignment.Top
+    statusText.Parent = statusSection
     
     return page
 end
@@ -380,143 +400,225 @@ end
 -- Function to create combat page
 function createCombatPage()
     local page = Instance.new("Frame")
-    page.Name = "CombatPage"
     page.Size = UDim2.new(1, 0, 1, 0)
     page.BackgroundTransparency = 1
     
-    local title = Instance.new("TextLabel")
-    title.Size = UDim2.new(1, 0, 0, 40)
-    title.Position = UDim2.new(0, 20, 0, 10)
-    title.BackgroundTransparency = 1
-    title.Text = "Combat Settings"
-    title.TextColor3 = colors.textPrimary
-    title.TextSize = 24
-    title.Font = Enum.Font.GothamBold
-    title.TextXAlignment = Enum.TextXAlignment.Left
-    title.Parent = page
+    local title = createSectionTitle("Combat Settings", page)
+    
+    local comingSoon = Instance.new("TextLabel")
+    comingSoon.Size = UDim2.new(1, 0, 0, 100)
+    comingSoon.Position = UDim2.new(0, 0, 0.4, 0)
+    comingSoon.BackgroundTransparency = 1
+    comingSoon.Text = "Combat Settings\n(Coming Soon)"
+    comingSoon.TextColor3 = colors.textTertiary
+    comingSoon.TextSize = 20
+    comingSoon.Font = Enum.Font.Gotham
+    comingSoon.Parent = page
     
     return page
 end
 
--- Function to create settings page
-function createSettingsPage()
+-- Function to create config page
+function createConfigPage()
     local page = Instance.new("Frame")
-    page.Name = "SettingsPage"
     page.Size = UDim2.new(1, 0, 1, 0)
     page.BackgroundTransparency = 1
     
-    local title = Instance.new("TextLabel")
-    title.Size = UDim2.new(1, 0, 0, 40)
-    title.Position = UDim2.new(0, 20, 0, 10)
-    title.BackgroundTransparency = 1
-    title.Text = "Settings"
-    title.TextColor3 = colors.textPrimary
-    title.TextSize = 24
-    title.Font = Enum.Font.GothamBold
-    title.TextXAlignment = Enum.TextXAlignment.Left
-    title.Parent = page
+    local title = createSectionTitle("Configuration", page)
+    
+    local comingSoon = Instance.new("TextLabel")
+    comingSoon.Size = UDim2.new(1, 0, 0, 100)
+    comingSoon.Position = UDim2.new(0, 0, 0.4, 0)
+    comingSoon.BackgroundTransparency = 1
+    comingSoon.Text = "Configuration Settings\n(Coming Soon)"
+    comingSoon.TextColor3 = colors.textTertiary
+    comingSoon.TextSize = 20
+    comingSoon.Font = Enum.Font.Gotham
+    comingSoon.Parent = page
     
     return page
 end
 
--- Function to create players page
-function createPlayersPage()
+-- Function to create player page
+function createPlayerPage()
     local page = Instance.new("Frame")
-    page.Name = "PlayersPage"
     page.Size = UDim2.new(1, 0, 1, 0)
     page.BackgroundTransparency = 1
     
-    local title = Instance.new("TextLabel")
-    title.Size = UDim2.new(1, 0, 0, 40)
-    title.Position = UDim2.new(0, 20, 0, 10)
-    title.BackgroundTransparency = 1
-    title.Text = "Players"
-    title.TextColor3 = colors.textPrimary
-    title.TextSize = 24
-    title.Font = Enum.Font.GothamBold
-    title.TextXAlignment = Enum.TextXAlignment.Left
-    title.Parent = page
+    local title = createSectionTitle("Player Data", page)
+    
+    local comingSoon = Instance.new("TextLabel")
+    comingSoon.Size = UDim2.new(1, 0, 0, 100)
+    comingSoon.Position = UDim2.new(0, 0, 0.4, 0)
+    comingSoon.BackgroundTransparency = 1
+    comingSoon.Text = "Player Data Analysis\n(Coming Soon)"
+    comingSoon.TextColor3 = colors.textTertiary
+    comingSoon.TextSize = 20
+    comingSoon.Font = Enum.Font.Gotham
+    comingSoon.Parent = page
     
     return page
 end
 
--- Utility function to create cards
-function createCard(title, size, position)
+-- Utility function to create section titles
+function createSectionTitle(text, parent)
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1, -40, 0, 40)
+    title.Position = UDim2.new(0, 20, 0, 10)
+    title.BackgroundTransparency = 1
+    title.Text = text
+    title.TextColor3 = colors.textPrimary
+    title.TextSize = 24
+    title.Font = Enum.Font.GothamBold
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.Parent = parent
+    return title
+end
+
+-- Utility function to create sections
+function createSection(title, size, position)
+    local section = Instance.new("Frame")
+    section.Size = size
+    section.Position = position
+    section.BackgroundColor3 = colors.surface
+    section.BorderSizePixel = 0
+    
+    local sectionCorner = Instance.new("UICorner")
+    sectionCorner.CornerRadius = UDim.new(0, 10)
+    sectionCorner.Parent = section
+    
+    local sectionTitle = Instance.new("TextLabel")
+    sectionTitle.Size = UDim2.new(1, 0, 0, 25)
+    sectionTitle.Position = UDim2.new(0, 0, 0, 0)
+    sectionTitle.BackgroundTransparency = 1
+    sectionTitle.Text = title
+    sectionTitle.TextColor3 = colors.textPrimary
+    sectionTitle.TextSize = 16
+    sectionTitle.Font = Enum.Font.GothamSemibold
+    sectionTitle.TextXAlignment = Enum.TextXAlignment.Left
+    sectionTitle.Parent = section
+    
+    local titlePadding = Instance.new("Frame")
+    titlePadding.Size = UDim2.new(1, -20, 0, 1)
+    titlePadding.Position = UDim2.new(0, 10, 0, 25)
+    titlePadding.BackgroundColor3 = colors.divider
+    titlePadding.BorderSizePixel = 0
+    titlePadding.Parent = section
+    
+    return section
+end
+
+-- Utility function to create stat cards
+function createStatCard(title, value, size, position)
     local card = Instance.new("Frame")
     card.Size = size
     card.Position = position
-    card.BackgroundColor3 = colors.surfaceLighter
+    card.BackgroundColor3 = colors.surface
     card.BorderSizePixel = 0
     
     local cardCorner = Instance.new("UICorner")
     cardCorner.CornerRadius = UDim.new(0, 8)
     cardCorner.Parent = card
     
-    local cardTitle = Instance.new("TextLabel")
-    cardTitle.Size = UDim2.new(1, 0, 0, 25)
-    cardTitle.Position = UDim2.new(0, 0, 0, 0)
-    cardTitle.BackgroundTransparency = 1
-    cardTitle.Text = title
-    cardTitle.TextColor3 = colors.textPrimary
-    cardTitle.TextSize = 14
-    cardTitle.Font = Enum.Font.GothamSemibold
-    cardTitle.TextXAlignment = Enum.TextXAlignment.Left
-    cardTitle.Parent = card
+    local titleLabel = Instance.new("TextLabel")
+    titleLabel.Size = UDim2.new(1, -20, 0, 20)
+    titleLabel.Position = UDim2.new(0, 10, 0, 15)
+    titleLabel.BackgroundTransparency = 1
+    titleLabel.Text = title
+    titleLabel.TextColor3 = colors.textSecondary
+    titleLabel.TextSize = 12
+    titleLabel.Font = Enum.Font.Gotham
+    titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+    titleLabel.Parent = card
     
-    local titlePadding = Instance.new("Frame")
-    titlePadding.Size = UDim2.new(1, 0, 0, 1)
-    titlePadding.Position = UDim2.new(0, 0, 0, 25)
-    titlePadding.BackgroundColor3 = colors.divider
-    titlePadding.BorderSizePixel = 0
-    titlePadding.Parent = card
+    local valueLabel = Instance.new("TextLabel")
+    valueLabel.Size = UDim2.new(1, -20, 0, 30)
+    valueLabel.Position = UDim2.new(0, 10, 0, 35)
+    valueLabel.BackgroundTransparency = 1
+    valueLabel.Text = value
+    valueLabel.TextColor3 = colors.textPrimary
+    valueLabel.TextSize = 20
+    valueLabel.Font = Enum.Font.GothamBold
+    valueLabel.TextXAlignment = Enum.TextXAlignment.Left
+    valueLabel.Parent = card
     
     return card
 end
 
--- Function to update navigation highlights
-function updateNavigation()
-    for _, button in ipairs(navButtons) do
-        local itemName = button.Name:gsub("Nav", "")
-        if itemName == selectedNav then
-            button.BackgroundColor3 = colors.accent
-            button.TextColor3 = colors.textPrimary
-        else
-            button.BackgroundColor3 = colors.surface
-            button.TextColor3 = colors.textSecondary
+-- Utility function to create control buttons
+function createControlButton(text, position, size)
+    local button = Instance.new("TextButton")
+    button.Size = size
+    button.Position = position
+    button.BackgroundColor3 = colors.surface
+    button.Text = text
+    button.TextColor3 = colors.textPrimary
+    button.TextSize = 14
+    button.Font = Enum.Font.GothamSemibold
+    
+    local buttonCorner = Instance.new("UICorner")
+    buttonCorner.CornerRadius = UDim.new(0, 8)
+    buttonCorner.Parent = button
+    
+    -- Hover effects
+    button.MouseEnter:Connect(function()
+        animateButtonHover(button, true)
+    end)
+    
+    button.MouseLeave:Connect(function()
+        animateButtonHover(button, false)
+    end)
+    
+    return button
+end
+
+-- Animation functions
+function animateButtonHover(button, isHover)
+    local targetColor = isHover and colors.surfaceLighter or colors.surface
+    local tweenInfo = TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+    local tween = TweenService:Create(button, tweenInfo, {BackgroundColor3 = targetColor})
+    tween:Play()
+end
+
+function animateSelection(button, isSelected)
+    local targetColor = isSelected and colors.surfaceLight or colors.surface
+    local tweenInfo = TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+    local tween = TweenService:Create(button, tweenInfo, {BackgroundColor3 = targetColor})
+    tween:Play()
+end
+
+-- Page switching function
+function switchPage(pageName, navButton)
+    if currentPage == pageName then return end
+    
+    -- Update navigation
+    for _, nav in ipairs(navButtons) do
+        if nav.name == currentPage then
+            animateSelection(nav.button, false)
+            nav.button.TextColor3 = colors.textSecondary
+            nav.button:FindFirstChild("Icon").TextColor3 = colors.textSecondary
+        end
+        
+        if nav.name == pageName then
+            animateSelection(nav.button, true)
+            nav.button.TextColor3 = colors.textPrimary
+            nav.button:FindFirstChild("Icon").TextColor3 = colors.textPrimary
+            
+            -- Animate selection indicator
+            local tweenInfo = TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+            local tween = TweenService:Create(selectionIndicator, tweenInfo, {Position = UDim2.new(1, -2, 0, nav.button.Position.Y.Offset)})
+            tween:Play()
         end
     end
+    
+    -- Hide current page, show new page
+    pages[currentPage].Visible = false
+    pages[pageName].Visible = true
+    
+    currentPage = pageName
 end
 
--- Function to update content visibility
-function updateContent()
-    for name, page in pairs(pages) do
-        page.Visible = (name == selectedNav)
-    end
-end
-
--- Initialize navigation
-updateNavigation()
-
--- Window control functionality
-minimizeBtn.MouseButton1Click:Connect(function()
-    contentArea.Visible = not contentArea.Visible
-end)
-
-maximizeBtn.MouseButton1Click:Connect(function()
-    if mainWindow.Size == UDim2.new(0, 700, 0, 500) then
-        mainWindow.Size = UDim2.new(0, 900, 0, 600)
-        mainWindow.Position = UDim2.new(0.5, -450, 0.5, -300)
-    else
-        mainWindow.Size = UDim2.new(0, 700, 0, 500)
-        mainWindow.Position = UDim2.new(0.5, -350, 0.5, -250)
-    end
-end)
-
-closeBtn.MouseButton1Click:Connect(function()
-    screenGui:Destroy()
-end)
-
--- Make window draggable
+-- Window dragging functionality
 local dragging = false
 local dragInput, dragStart, startPos
 
@@ -540,12 +642,28 @@ titleBar.InputChanged:Connect(function(input)
     end
 end)
 
-game:GetService("UserInputService").InputChanged:Connect(function(input)
+UserInputService.InputChanged:Connect(function(input)
     if input == dragInput and dragging then
         local delta = input.Position - dragStart
         mainWindow.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
     end
 end)
 
-print("🌟 LightAI Controller loaded successfully!")
-print("Windows 11 style GUI created with sidebar navigation")
+-- Close button functionality
+closeBtn.MouseButton1Click:Connect(function()
+    screenGui:Destroy()
+end)
+
+-- Close button hover effects
+closeBtn.MouseEnter:Connect(function()
+    animateButtonHover(closeBtn, true)
+end)
+
+closeBtn.MouseLeave:Connect(function()
+    animateButtonHover(closeBtn, false)
+end)
+
+print("🎯 LightAI Controller loaded successfully!")
+print("📱 Premium black & white design with smooth animations")
+print("🖱️ Drag the title bar to move the window")
+print("⚡ Use sidebar to navigate between sections")
