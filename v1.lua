@@ -1,16 +1,10 @@
 --[[
-    LightAI - GUI + Chat AI integration (single script)
+    LightAI - GUI + Chat AI (direct OpenAI)
 
-    Tabs:
-    1) AI Control      - user message box, Send button, mode (Advanced/Quick)
-    2) AI Output       - scrolling log of conversation
-    3) GUI Appearance  - empty for now
-
-    AI:
-    - Uses HTTP request to your proxy:
-      https://lightai-proxy-whitte5219.vercel.app/lightai
-    - Sends: instructions, history, latest message, mode
-    - Receives: { reply = "..." } and logs it
+    IMPORTANT:
+    - This script calls OpenAI directly from Roblox.
+    - DO NOT commit your real API key to GitHub.
+      Replace it with "REMOVED_FOR_GITHUB" before pushing.
 ]]
 
 -----------------------
@@ -21,7 +15,13 @@ local WINDOW_HEIGHT = 380
 local SIDEBAR_WIDTH = 150
 local PAGE_MARGIN = 10
 
-local API_URL = "https://lightai-proxy.vercel.app/api/lightai"
+-- ========= OPENAI CONFIG =========
+-- ⚠️ PUT YOUR REAL KEY HERE ONLY LOCALLY. REMOVE BEFORE PUBLISHING.
+local OPENAI_KEY = "YOUR_OPENAI_KEY_HERE"
+
+-- OpenAI Chat Completions endpoint
+local API_URL = "https://api.openai.com/v1/chat/completions"
+-- =================================
 
 -----------------------
 -- SERVICES
@@ -38,12 +38,12 @@ local localPlayer = Players.LocalPlayer or Players:GetPlayers()[1]
 -----------------------
 local AI = {
     Instructions = "You are LightAI, an experimental assistant controlled from a Roblox GUI. Be concise, helpful, and safe.",
-    Mode = "Advanced",          -- or "Quick"
+    Mode = "Advanced",          -- or "Quick" (you can use this later to tweak behavior)
     History = {},               -- { {role="user"/"ai"/"system", text="..."}, ... }
     MaxHistory = 20,
 }
 
-local outputFrame -- will be set after GUI is built
+local outputFrame -- set later
 
 local function addToHistory(role, text)
     table.insert(AI.History, { role = role, text = text })
@@ -80,7 +80,6 @@ local function createLogLabel(role, text)
     label.Text = prefix .. text
     label.Parent = outputFrame
 
-    -- update scroll size
     task.wait()
     local contentSize = outputFrame.UIListLayout.AbsoluteContentSize
     outputFrame.CanvasSize = UDim2.new(0, 0, 0, contentSize.Y + 10)
@@ -94,6 +93,65 @@ end
 
 local sending = false
 
+-----------------------
+-- HTTP HELPER (OpenAI)
+-----------------------
+local function httpPostJson(url, jsonBody)
+    -- Try executor HTTP first (if running via exploit)
+    local httpRequest = (syn and syn.request)
+        or (http and http.request)
+        or http_request
+        or request
+        or (fluxus and fluxus.request)
+
+    if httpRequest then
+        local resp = httpRequest({
+            Url = url,
+            Method = "POST",
+            Headers = {
+                ["Content-Type"] = "application/json",
+                ["Authorization"] = "Bearer " .. OPENAI_KEY,
+            },
+            Body = jsonBody,
+        })
+        if not resp then
+            error("Exploit HTTP returned nil response")
+        end
+        local body = resp.Body or resp.body
+        if not body then
+            error("Exploit HTTP response has no Body")
+        end
+        return body
+    else
+        -- Fallback: Roblox HttpService
+        local ok, resp = pcall(function()
+            return HttpService:RequestAsync({
+                Url = url,
+                Method = "POST",
+                Headers = {
+                    ["Content-Type"] = "application/json",
+                    ["Authorization"] = "Bearer " .. OPENAI_KEY,
+                },
+                Body = jsonBody,
+            })
+        end)
+
+        if not ok or not resp then
+            error("HttpService.RequestAsync failed")
+        end
+
+        if not resp.Success then
+            error("HTTP " .. tostring(resp.StatusCode) .. " " .. tostring(resp.StatusMessage) ..
+                " | " .. tostring(resp.Body))
+        end
+
+        return resp.Body
+    end
+end
+
+-----------------------
+-- CALL OPENAI
+-----------------------
 local function CallLightAI(userText)
     if sending then
         Log("system", "Please wait, still responding...")
@@ -105,63 +163,55 @@ local function CallLightAI(userText)
     Log("user", userText)
 
     task.spawn(function()
-        local payload = {
-            instructions = AI.Instructions,
-            history = AI.History,
-            message = userText,
-            mode = AI.Mode,
-        }
-
         local ok, result = pcall(function()
-            local json = HttpService:JSONEncode(payload)
-            local body
+            -- Build messages array for OpenAI
+            local messages = {
+                { role = "system", content = AI.Instructions }
+            }
 
-            -- try exploit HTTP first
-            local httpRequest = (syn and syn.request)
-                or (http and http.request)
-                or http_request
-                or request
-                or (fluxus and fluxus.request)
-
-            if httpRequest then
-                local resp = httpRequest({
-                    Url = API_URL,
-                    Method = "POST",
-                    Headers = {
-                        ["Content-Type"] = "application/json",
-                    },
-                    Body = json,
-                })
-                body = resp and (resp.Body or resp.body)
-            else
-                -- fallback to HttpService
-                body = HttpService:PostAsync(
-                    API_URL,
-                    json,
-                    Enum.HttpContentType.ApplicationJson,
-                    false
-                )
+            for _, h in ipairs(AI.History) do
+                -- only replay user/ai messages
+                if h.role == "user" or h.role == "ai" then
+                    local role = (h.role == "ai") and "assistant" or "user"
+                    table.insert(messages, {
+                        role = role,
+                        content = h.text
+                    })
+                end
             end
 
+            table.insert(messages, { role = "user", content = userText })
+
+            local payload = {
+                model = "gpt-4o-mini",
+                messages = messages,
+            }
+
+            local json = HttpService:JSONEncode(payload)
+            local body = httpPostJson(API_URL, json)
             if not body then
-                error("Server returned empty body")
+                error("Empty response body")
             end
 
             local okDecode, data = pcall(function()
                 return HttpService:JSONDecode(body)
             end)
-
             if not okDecode then
                 error("Can't parse JSON. Raw body: " .. tostring(body))
             end
 
-            return data.reply or "(no reply from server)"
+            local reply = data.choices
+                and data.choices[1]
+                and data.choices[1].message
+                and data.choices[1].message.content
+
+            return reply or "(no reply from OpenAI)"
         end)
 
         if ok then
             Log("ai", result)
         else
-            Log("system", "Error talking to server: " .. tostring(result))
+            Log("system", "Error talking to OpenAI: " .. tostring(result))
         end
 
         sending = false
@@ -741,15 +791,15 @@ list.Padding = UDim.new(0, 4)
 list.FillDirection = Enum.FillDirection.Vertical
 list.SortOrder = Enum.SortOrder.LayoutOrder
 list.Parent = outputFrame
+outputFrame.UIListLayout = list
 
--- show initial system message
 Log("system", "LightAI ready. Type a message in the AI Control tab.")
 
 -----------------------
 -- PAGE CONTENT: GUI APPEARANCE (empty for now)
 -----------------------
 local guiAppearancePage = pages["GUI Appearance"]
--- you can add appearance controls here later
+-- you can add appearance controls later
 
 -----------------------
 -- DEFAULT ACTIVE TAB
