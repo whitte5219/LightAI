@@ -1,18 +1,110 @@
----------------------------------------------------------
---  LIGHTAI — COHERE VERSION (WORKING)
---  Put this at the top of your script:
----------------------------------------------------------
+--[[
+    LightAI - GUI + Chat AI (Cohere)
 
+    WARNING:
+    - This script calls Cohere directly from Roblox.
+    - The API key is NOT stored here; it is read from getgenv().LIGHTAI_KEY.
+]]
+
+-----------------------
+-- CONFIG
+-----------------------
+local WINDOW_WIDTH = 600
+local WINDOW_HEIGHT = 380
+local SIDEBAR_WIDTH = 150
+local PAGE_MARGIN = 10
+
+-----------------------
+-- SERVICES
+-----------------------
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
 local HttpService = game:GetService("HttpService")
 
-local COHERE_KEY = (getgenv and getgenv().LIGHTAI_KEY) or "NO_KEY_SET"
+local localPlayer = Players.LocalPlayer or Players:GetPlayers()[1]
 
+-----------------------
+-- AI CORE (CHAT + HISTORY)
+-----------------------
+local AI = {
+    Instructions = "You are LightAI, an experimental assistant controlled from a Roblox GUI. Be concise, safe, and helpful.",
+    Mode = "Advanced",          -- or "Quick"
+    History = {},               -- { {role="user"/"ai"/"system", text="..."}, ... }
+    MaxHistory = 20,
+}
+
+local outputFrame
+local outputListLayout
+local sending = false
+
+-----------------------
+-- LOGGING / HISTORY
+-----------------------
+local function addToHistory(role, text)
+    table.insert(AI.History, { role = role, text = text })
+    if #AI.History > AI.MaxHistory then
+        table.remove(AI.History, 1)
+    end
+end
+
+local function createLogLabel(role, text)
+    if not outputFrame then return end
+
+    local label = Instance.new("TextLabel")
+    label.BackgroundTransparency = 1
+    label.Size = UDim2.new(1, -10, 0, 0)
+    label.AutomaticSize = Enum.AutomaticSize.Y
+    label.Font = Enum.Font.Gotham
+    label.TextWrapped = true
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.TextYAlignment = Enum.TextYAlignment.Top
+    label.TextSize = 14
+
+    local prefix
+    if role == "user" then
+        prefix = "You: "
+        label.TextColor3 = Color3.fromRGB(255, 255, 255)
+    elseif role == "ai" then
+        prefix = "LightAI: "
+        label.TextColor3 = Color3.fromRGB(220, 220, 220)
+    else
+        prefix = "[System]: "
+        label.TextColor3 = Color3.fromRGB(200, 200, 200)
+    end
+
+    label.Text = prefix .. text
+    label.Parent = outputFrame
+
+    task.wait()
+    if outputListLayout then
+        local contentSize = outputListLayout.AbsoluteContentSize
+        outputFrame.CanvasSize = UDim2.new(0, 0, 0, contentSize.Y + 10)
+        outputFrame.CanvasPosition = Vector2.new(0, math.max(0, contentSize.Y - outputFrame.AbsoluteSize.Y))
+    end
+end
+
+local function Log(role, text)
+    addToHistory(role, text)
+    createLogLabel(role, text)
+end
+
+-----------------------
+-- COHERE CONFIG + HTTP
+-----------------------
+local COHERE_KEY = (getgenv and getgenv().LIGHTAI_KEY) or "NO_KEY_SET"
 local API_URL = "https://api.cohere.ai/v1/chat"
 
----------------------------------------------------------
---  HTTP FUNCTION (WORKS WITH EXECUTORS + ROBLOX)
----------------------------------------------------------
 local function httpPostJson(url, jsonBody)
+    if COHERE_KEY == "NO_KEY_SET" then
+        error("Cohere key not set. Set getgenv().LIGHTAI_KEY in your executor first.")
+    end
+
+    local headers = {
+        ["Content-Type"] = "application/json",
+        ["Authorization"] = "Bearer " .. COHERE_KEY,
+        ["Cohere-Version"] = "2022-12-06",
+    }
+
     local httpRequest =
         (syn and syn.request)
         or (http and http.request)
@@ -20,46 +112,50 @@ local function httpPostJson(url, jsonBody)
         or request
         or (fluxus and fluxus.request)
 
-    local headers = {
-        ["Content-Type"] = "application/json",
-        ["Authorization"] = "Bearer " .. COHERE_KEY,
-        ["Cohere-Version"] = "2022-12-06"
-    }
-
     if httpRequest then
         local resp = httpRequest({
             Url = url,
             Method = "POST",
             Headers = headers,
-            Body = jsonBody
+            Body = jsonBody,
         })
-        return resp and (resp.Body or resp.body)
+        if not resp then
+            error("Exploit HTTP returned nil response")
+        end
+        local body = resp.Body or resp.body
+        if not body then
+            error("Exploit HTTP response has no Body")
+        end
+        return body
     else
-        return HttpService:PostAsync(
-            url,
-            jsonBody,
-            Enum.HttpContentType.ApplicationJson,
-            false,
-            headers
-        )
+        local ok, resp = pcall(function()
+            return HttpService:RequestAsync({
+                Url = url,
+                Method = "POST",
+                Headers = headers,
+                Body = jsonBody,
+            })
+        end)
+
+        if not ok or not resp then
+            error("HttpService.RequestAsync failed")
+        end
+
+        if not resp.Success then
+            error("HTTP " .. tostring(resp.StatusCode) .. " " .. tostring(resp.StatusMessage) ..
+                " | " .. tostring(resp.Body))
+        end
+
+        return resp.Body
     end
 end
 
----------------------------------------------------------
---  COHERE RESPONSE PARSER
----------------------------------------------------------
-local function extractCohereReply(json)
-    if not json then return nil end
-    if not json.text then return nil end
-    return json.text
-end
-
----------------------------------------------------------
---  YOUR AI CALL FUNCTION
----------------------------------------------------------
+-----------------------
+-- CALL COHERE
+-----------------------
 function CallLightAI(userText)
     if sending then
-        Log("system", "Still responding…")
+        Log("system", "Please wait, still responding...")
         return
     end
     if not userText or userText == "" then return end
@@ -69,69 +165,61 @@ function CallLightAI(userText)
 
     task.spawn(function()
         local ok, result = pcall(function()
-
-            ---------------------------------------------------------
-            -- BUILD COHERE PAYLOAD
-            ---------------------------------------------------------
-            local messages = {}
-
-            table.insert(messages, {
-                role = "system",
-                content = AI.Instructions
-            })
+            -- Build chat_history for Cohere
+            local chat_history = {}
 
             for _, h in ipairs(AI.History) do
-                table.insert(messages, {
-                    role = (h.role == "ai" and "assistant" or "user"),
-                    content = h.text
-                })
+                if h.role == "user" then
+                    table.insert(chat_history, {
+                        role = "USER",
+                        message = h.text,
+                    })
+                elseif h.role == "ai" then
+                    table.insert(chat_history, {
+                        role = "CHATBOT",
+                        message = h.text,
+                    })
+                end
             end
-
-            table.insert(messages, {
-                role = "user",
-                content = userText
-            })
 
             local payload = {
-                model = "command-r", -- Cohere's chat model
-                messages = messages,
+                model = "command-r",
+                message = userText,
+                preamble = AI.Instructions,
+                chat_history = chat_history,
+                stream = false,
             }
 
-            local body = HttpService:JSONEncode(payload)
-            local raw = httpPostJson(API_URL, body)
-
-            if not raw then
-                error("No response from Cohere")
+            local json = HttpService:JSONEncode(payload)
+            local body = httpPostJson(API_URL, json)
+            if not body then
+                error("Empty response body")
             end
 
-            print("RAW:", raw)
+            local okDecode, data = pcall(function()
+                return HttpService:JSONDecode(body)
+            end)
+            if not okDecode then
+                error("Can't parse JSON. Raw body: " .. tostring(body))
+            end
 
-            local decoded = HttpService:JSONDecode(raw)
-            local reply = extractCohereReply(decoded)
+            local reply = data.text
+            if not reply or reply == "" then
+                reply = "(no reply from Cohere)\nRaw: " .. string.sub(HttpService:JSONEncode(data), 1, 200)
+            end
 
-            return reply, raw
+            return reply
         end)
 
         if ok then
-            local reply, raw = result[1], result[2]
-
-            if reply then
-                Log("ai", reply)
-            else
-                Log("ai", "(no reply from Cohere)")
-                Log("system", "Raw: " .. tostring(raw))
-            end
+            Log("ai", result)
         else
-            Log("system", "Error: " .. tostring(result))
+            Log("system", "Error talking to Cohere: " .. tostring(result))
         end
 
         sending = false
     end)
 end
-
----------------------------------------------------------
---  END COHERE ENGINE
----------------------------------------------------------
 
 -----------------------
 -- ROOT GUI
@@ -692,13 +780,12 @@ outputListLayout.FillDirection = Enum.FillDirection.Vertical
 outputListLayout.SortOrder = Enum.SortOrder.LayoutOrder
 outputListLayout.Parent = outputFrame
 
-Log("system", "LightAI (OpenAI Responses) ready. Type a message in the AI Control tab.")
+Log("system", "LightAI (Cohere) ready. Type a message in the AI Control tab.")
 
 -----------------------
--- PAGE: GUI APPEARANCE (empty)
+-- PAGE: GUI APPEARANCE (empty for now)
 -----------------------
 local guiAppearancePage = pages["GUI Appearance"]
--- (Add appearance options later if you want.)
 
 -----------------------
 -- DEFAULT TAB
