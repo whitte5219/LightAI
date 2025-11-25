@@ -1,10 +1,9 @@
 --[[
-    LightAI - GUI + Chat AI (direct OpenAI)
+    LightAI - GUI + Chat AI (direct Cohere)
 
     IMPORTANT:
-    - This script calls OpenAI directly from Roblox.
-    - DO NOT commit your real API key to GitHub.
-      Replace it with "REMOVED_FOR_GITHUB" before pushing.
+    - This script calls Cohere directly from Roblox.
+    - DO NOT commit your real API key to a public GitHub repo.
 ]]
 
 -----------------------
@@ -15,12 +14,12 @@ local WINDOW_HEIGHT = 380
 local SIDEBAR_WIDTH = 150
 local PAGE_MARGIN = 10
 
--- ========= OPENAI CONFIG =========
--- ⚠️ PUT YOUR REAL KEY HERE ONLY LOCALLY. REMOVE BEFORE PUBLISHING.
-local OPENAI_KEY = "YOUR_OPENAI_KEY_HERE"
+-- ========= COHERE CONFIG =========
+-- ⚠️ PUT YOUR REAL KEY HERE LOCALLY. DO NOT PUSH REAL KEY TO PUBLIC GITHUB.
+local COHERE_KEY = "iSWj4PzBCCuIuZJ0PrZE0uiQBxJ0gculwOOHvqJt"
 
--- OpenAI Chat Completions endpoint
-local API_URL = "https://api.openai.com/v1/chat/completions"
+-- Cohere Chat v1 endpoint
+local API_URL = "https://api.cohere.ai/v1/chat"
 -- =================================
 
 -----------------------
@@ -38,12 +37,13 @@ local localPlayer = Players.LocalPlayer or Players:GetPlayers()[1]
 -----------------------
 local AI = {
     Instructions = "You are LightAI, an experimental assistant controlled from a Roblox GUI. Be concise, helpful, and safe.",
-    Mode = "Advanced",          -- or "Quick" (you can use this later to tweak behavior)
+    Mode = "Advanced",          -- or "Quick" (can be used later to change settings)
     History = {},               -- { {role="user"/"ai"/"system", text="..."}, ... }
     MaxHistory = 20,
 }
 
-local outputFrame -- set later
+local outputFrame
+local outputListLayout
 
 local function addToHistory(role, text)
     table.insert(AI.History, { role = role, text = text })
@@ -81,9 +81,11 @@ local function createLogLabel(role, text)
     label.Parent = outputFrame
 
     task.wait()
-    local contentSize = outputFrame.UIListLayout.AbsoluteContentSize
-    outputFrame.CanvasSize = UDim2.new(0, 0, 0, contentSize.Y + 10)
-    outputFrame.CanvasPosition = Vector2.new(0, math.max(0, contentSize.Y - outputFrame.AbsoluteSize.Y))
+    if outputListLayout then
+        local contentSize = outputListLayout.AbsoluteContentSize
+        outputFrame.CanvasSize = UDim2.new(0, 0, 0, contentSize.Y + 10)
+        outputFrame.CanvasPosition = Vector2.new(0, math.max(0, contentSize.Y - outputFrame.AbsoluteSize.Y))
+    end
 end
 
 local function Log(role, text)
@@ -94,10 +96,10 @@ end
 local sending = false
 
 -----------------------
--- HTTP HELPER (OpenAI)
+-- HTTP HELPER (Cohere)
 -----------------------
 local function httpPostJson(url, jsonBody)
-    -- Try executor HTTP first (if running via exploit)
+    -- Try executor HTTP first (if using an exploit)
     local httpRequest = (syn and syn.request)
         or (http and http.request)
         or http_request
@@ -110,7 +112,7 @@ local function httpPostJson(url, jsonBody)
             Method = "POST",
             Headers = {
                 ["Content-Type"] = "application/json",
-                ["Authorization"] = "Bearer " .. OPENAI_KEY,
+                ["Authorization"] = "Bearer " .. COHERE_KEY,
             },
             Body = jsonBody,
         })
@@ -130,7 +132,7 @@ local function httpPostJson(url, jsonBody)
                 Method = "POST",
                 Headers = {
                     ["Content-Type"] = "application/json",
-                    ["Authorization"] = "Bearer " .. OPENAI_KEY,
+                    ["Authorization"] = "Bearer " .. COHERE_KEY,
                 },
                 Body = jsonBody,
             })
@@ -150,7 +152,7 @@ local function httpPostJson(url, jsonBody)
 end
 
 -----------------------
--- CALL OPENAI
+-- CALL COHERE
 -----------------------
 local function CallLightAI(userText)
     if sending then
@@ -164,27 +166,30 @@ local function CallLightAI(userText)
 
     task.spawn(function()
         local ok, result = pcall(function()
-            -- Build messages array for OpenAI
-            local messages = {
-                { role = "system", content = AI.Instructions }
-            }
+            -- Build chat_history for Cohere
+            local chat_history = {}
 
             for _, h in ipairs(AI.History) do
-                -- only replay user/ai messages
-                if h.role == "user" or h.role == "ai" then
-                    local role = (h.role == "ai") and "assistant" or "user"
-                    table.insert(messages, {
-                        role = role,
-                        content = h.text
+                if h.role == "user" then
+                    table.insert(chat_history, {
+                        role = "USER",
+                        message = h.text,
+                    })
+                elseif h.role == "ai" then
+                    table.insert(chat_history, {
+                        role = "CHATBOT",
+                        message = h.text,
                     })
                 end
+                -- system messages are not added to chat_history; we use preamble instead
             end
 
-            table.insert(messages, { role = "user", content = userText })
-
             local payload = {
-                model = "gpt-4o-mini",
-                messages = messages,
+                model = "command-r",
+                message = userText,
+                stream = false,
+                preamble = AI.Instructions,
+                chat_history = chat_history,
             }
 
             local json = HttpService:JSONEncode(payload)
@@ -200,18 +205,18 @@ local function CallLightAI(userText)
                 error("Can't parse JSON. Raw body: " .. tostring(body))
             end
 
-            local reply = data.choices
-                and data.choices[1]
-                and data.choices[1].message
-                and data.choices[1].message.content
+            local reply = data.text
+            if not reply or reply == "" then
+                reply = "(no reply from Cohere)"
+            end
 
-            return reply or "(no reply from OpenAI)"
+            return reply
         end)
 
         if ok then
             Log("ai", result)
         else
-            Log("system", "Error talking to OpenAI: " .. tostring(result))
+            Log("system", "Error talking to Cohere: " .. tostring(result))
         end
 
         sending = false
@@ -786,20 +791,20 @@ outputFrame.ScrollBarImageColor3 = Color3.fromRGB(180, 180, 180)
 outputFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
 outputFrame.Parent = outputBg
 
-local list = Instance.new("UIListLayout")
-list.Padding = UDim.new(0, 4)
-list.FillDirection = Enum.FillDirection.Vertical
-list.SortOrder = Enum.SortOrder.LayoutOrder
-list.Parent = outputFrame
-outputFrame.UIListLayout = list
+outputListLayout = Instance.new("UIListLayout")
+outputListLayout.Padding = UDim.new(0, 4)
+outputListLayout.FillDirection = Enum.FillDirection.Vertical
+outputListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+outputListLayout.Parent = outputFrame
 
-Log("system", "LightAI ready. Type a message in the AI Control tab.")
+-- initial message
+Log("system", "LightAI (Cohere) ready. Type a message in the AI Control tab.")
 
 -----------------------
 -- PAGE CONTENT: GUI APPEARANCE (empty for now)
 -----------------------
 local guiAppearancePage = pages["GUI Appearance"]
--- you can add appearance controls later
+-- add style sliders / toggles later if you want
 
 -----------------------
 -- DEFAULT ACTIVE TAB
