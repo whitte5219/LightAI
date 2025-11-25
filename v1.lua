@@ -254,25 +254,20 @@ function CallLightAI(userText)
 
     task.spawn(function()
         local ok, result = pcall(function()
-            -- Build chat_history for Cohere
+            -- Build chat history
             local chat_history = {}
-
             for _, h in ipairs(AI.History) do
                 if h.role == "user" then
-                    table.insert(chat_history, {
-                        role = "USER",
-                        message = h.text,
-                    })
+                    table.insert(chat_history, { role = "USER", message = h.text })
                 elseif h.role == "ai" then
-                    table.insert(chat_history, {
-                        role = "CHATBOT",
-                        message = h.text,
-                    })
+                    table.insert(chat_history, { role = "CHATBOT", message = h.text })
                 end
             end
 
+            -- Select correct instructions
             local preamble = ControlCharacterEnabled and AI.ControlInstructions or AI.ChatInstructions
 
+            -- Build payload
             local payload = {
                 model = COHERE_MODEL,
                 message = userText,
@@ -306,26 +301,33 @@ function CallLightAI(userText)
             local reply = result
 
             if ControlCharacterEnabled then
-    -- Try to pull just the JSON block from the reply
-    local jsonChunk = reply:match("{.*}")
-    if not jsonChunk then
-        Log("system", "Couldn't find JSON in control reply:\n" .. tostring(reply))
-    else
-        local decodeOK, decoded = pcall(function()
-            return HttpService:JSONDecode(jsonChunk)
-        end)
+                -- Extract JSON block
+                local jsonChunk = reply:match("{.*}")
+                if not jsonChunk then
+                    Log("system", "Couldn't find JSON in control reply:\n" .. tostring(reply))
+                else
+                    local decodeOK, decoded = pcall(function()
+                        return HttpService:JSONDecode(jsonChunk)
+                    end)
 
-        if decodeOK and type(decoded) == "table" and type(decoded.actions) == "table" then
-            Log("system", "Executing control actions...")
-            executeActions(decoded.actions)
-            Log("ai", "Commands: " .. jsonChunk)
+                    if decodeOK and decoded and decoded.actions then
+                        Log("system", "Executing control actions...")
+                        executeActions(decoded.actions)
+                        Log("ai", "Commands: " .. jsonChunk)
+                    else
+                        Log("system", "Failed to parse control JSON:\n" .. tostring(jsonChunk))
+                    end
+                end
+            else
+                Log("ai", reply)
+            end
+
         else
-            Log("system", "Failed to parse control JSON:\n" .. tostring(jsonChunk))
+            Log("system", "Error talking to Cohere: " .. tostring(result))
         end
-    end
-else
-    -- Normal chat mode
-    Log("ai", reply)
+
+        sending = false
+    end)
 end
 
 -----------------------
