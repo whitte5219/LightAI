@@ -28,24 +28,45 @@ local localPlayer = Players.LocalPlayer or Players:GetPlayers()[1]
 -----------------------
 local CHAT_INSTRUCTIONS = "You are LightAI, a friendly assistant inside a Roblox GUI. Speak casually, like a normal player. You must still follow safety rules and refuse anything harmful or NSFW, but for normal questions answer directly and naturally."
 
-local CONTROL_INSTRUCTIONS = [[You are controlling a Roblox player.
+local CONTROL_INSTRUCTIONS = [[You control the player's Roblox character.
 
-ONLY OUTPUT JSON. NOTHING ELSE.
+You MUST output ONLY a single JSON object and NOTHING ELSE.
+No explanations, no extra text, no code blocks.
 
-Valid actions:
-- MOVE: forward, back, left, right, time (0.1 to 2.0 seconds)
-- JUMP
-- CLICK
-- LOOK: x (pixels), y (pixels)
+ALLOWED ACTION TYPES:
 
-FORMAT (no extra text):
+MOVE:
+  {"type":"MOVE","direction":"forward|back|left|right","time":0.1–2.0}
+
+JUMP:
+  {"type":"JUMP"}
+
+WAIT:
+  {"type":"WAIT","time":seconds}
+
+CLICK:
+  {"type":"CLICK"}
+
+LOOK:
+  {"type":"LOOK","x":pixels,"y":pixels}
+
+WALK_TO_NEAREST:
+  {"type":"WALK_TO_NEAREST"}
+
+WHILE example:
+{
+  "type":"WHILE",
+  "duration":seconds,
+  "actions":[ ... ]
+}
+
+OUTPUT FORMAT EXAMPLE:
 
 {"actions":[
-  {"type":"MOVE","direction":"forward","time":0.5},
-  {"type":"JUMP"},
-  {"type":"LOOK","x":10,"y":-5},
-  {"type":"CLICK"}
-]}]]
+  { "type":"MOVE","direction":"forward","time":0.5" },
+  { "type":"JUMP" }
+]}
+]]
 
 
 local AI = {
@@ -176,23 +197,32 @@ local function httpPostJson(url, jsonBody)
 end
 
 -----------------------
--- CHARACTER CONTROL HELPERS (CLEAN + VIM-ONLY)
+-- CHARACTER CONTROL HELPERS (ADVANCED VERSION)
 -----------------------
 
 local VirtualInputManager = game:GetService("VirtualInputManager")
+local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
 
 local player = Players.LocalPlayer
 
 -------------------------------------------------
--- KEY PRESS HELPERS
+-- LOW-LEVEL INPUT FUNCTIONS
 -------------------------------------------------
+
+local function pressKeyDown(key)
+    VirtualInputManager:SendKeyEvent(true, key, false, game)
+end
+
+local function pressKeyUp(key)
+    VirtualInputManager:SendKeyEvent(false, key, false, game)
+end
 
 local function pressKey(keycode, time)
     time = tonumber(time) or 0.3
-    VirtualInputManager:SendKeyEvent(true, keycode, false, game)
+    pressKeyDown(keycode)
     task.wait(time)
-    VirtualInputManager:SendKeyEvent(false, keycode, false, game)
+    pressKeyUp(keycode)
 end
 
 local function pressMouse(time)
@@ -206,7 +236,6 @@ local function moveMouse(dx, dy)
     dx = tonumber(dx) or 0
     dy = tonumber(dy) or 0
 
-    -- Try both modes (some executors use absolute, others delta)
     local ok = pcall(function()
         VirtualInputManager:SendMouseMoveEvent(dx, dy, true)
     end)
@@ -217,7 +246,128 @@ local function moveMouse(dx, dy)
 end
 
 -------------------------------------------------
--- MAIN ACTION EXECUTION
+-- HELPER: FIND NEAREST PLAYER
+-------------------------------------------------
+
+local function getNearestPlayer()
+    local myChar = player.Character
+    if not myChar or not myChar:FindFirstChild("HumanoidRootPart") then return nil end
+
+    local myPos = myChar.HumanoidRootPart.Position
+    local nearest = nil
+    local nearestDist = math.huge
+
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= player and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+            local pos = plr.Character.HumanoidRootPart.Position
+            local dist = (myPos - pos).Magnitude
+
+            if dist < nearestDist then
+                nearest = plr
+                nearestDist = dist
+            end
+        end
+    end
+
+    return nearest
+end
+
+-------------------------------------------------
+-- ADVANCED ACTIONS
+-------------------------------------------------
+
+local function walkToNearest()
+    local target = getNearestPlayer()
+    if not target then return end
+
+    local myChar = player.Character
+    if not myChar or not myChar:FindFirstChild("HumanoidRootPart") then return end
+
+    local root = myChar.HumanoidRootPart
+    local maxTime = 6  -- safety timeout
+
+    pressKeyUp(Enum.KeyCode.W)
+    pressKeyUp(Enum.KeyCode.A)
+    pressKeyUp(Enum.KeyCode.S)
+    pressKeyUp(Enum.KeyCode.D)
+
+    local startTime = tick()
+
+    while tick() - startTime < maxTime do
+        if not target.Character or not target.Character:FindFirstChild("HumanoidRootPart") then break end
+
+        local tPos = target.Character.HumanoidRootPart.Position
+        local myPos = root.Position
+
+        local diff = tPos - myPos
+
+        -- Decide direction
+        pressKeyDown(Enum.KeyCode.W)
+
+        if diff.X > 2 then
+            pressKeyDown(Enum.KeyCode.D)
+        elseif diff.X < -2 then
+            pressKeyDown(Enum.KeyCode.A)
+        else
+            pressKeyUp(Enum.KeyCode.D)
+            pressKeyUp(Enum.KeyCode.A)
+        end
+
+        if diff.Magnitude < 4 then break end
+
+        RunService.Heartbeat:Wait()
+    end
+
+    pressKeyUp(Enum.KeyCode.W)
+    pressKeyUp(Enum.KeyCode.A)
+    pressKeyUp(Enum.KeyCode.D)
+end
+
+-------------------------------------------------
+-- WHILE ACTIONS (PARALLEL EXECUTION)
+-------------------------------------------------
+
+local function executeWhileAction(duration, actions)
+    duration = tonumber(duration) or 1.0
+    local endTime = tick() + duration
+    local lastJump = 0
+
+    -- Hold MOVE keys down
+    local moveDirs = {}
+
+    for _, act in ipairs(actions) do
+        if act.type == "MOVE" then
+            local dir = (act.direction or ""):lower()
+            moveDirs[dir] = true
+        end
+    end
+
+    if moveDirs["forward"] then pressKeyDown(Enum.KeyCode.W) end
+    if moveDirs["back"] then pressKeyDown(Enum.KeyCode.S) end
+    if moveDirs["left"] then pressKeyDown(Enum.KeyCode.A) end
+    if moveDirs["right"] then pressKeyDown(Enum.KeyCode.D) end
+
+    while tick() < endTime do
+        for _, act in ipairs(actions) do
+            if act.type == "JUMP" then
+                if tick() - lastJump > 0.8 then
+                    pressKey(Enum.KeyCode.Space, 0.1)
+                    lastJump = tick()
+                end
+            end
+        end
+        RunService.Heartbeat:Wait()
+    end
+
+    -- Release all movement keys
+    pressKeyUp(Enum.KeyCode.W)
+    pressKeyUp(Enum.KeyCode.S)
+    pressKeyUp(Enum.KeyCode.A)
+    pressKeyUp(Enum.KeyCode.D)
+end
+
+-------------------------------------------------
+-- MAIN EXECUTION SYSTEM
 -------------------------------------------------
 
 function executeActions(actions)
@@ -244,6 +394,15 @@ function executeActions(actions)
 
         elseif t == "LOOK" then
             moveMouse(action.x, action.y)
+
+        elseif t == "WAIT" then
+            task.wait(tonumber(action.time) or 0.5)
+
+        elseif t == "WALK_TO_NEAREST" then
+            walkToNearest()
+
+        elseif t == "WHILE" then
+            executeWhileAction(action.duration, action.actions or {})
         end
     end
 end
