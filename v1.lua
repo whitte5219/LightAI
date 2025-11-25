@@ -236,13 +236,7 @@ local function moveMouse(dx, dy)
     dx = tonumber(dx) or 0
     dy = tonumber(dy) or 0
 
-    local ok = pcall(function()
-        VirtualInputManager:SendMouseMoveEvent(dx, dy, true)
-    end)
-
-    if not ok then
-        VirtualInputManager:SendMouseMoveEvent(dx, dy, false)
-    end
+    VirtualInputManager:SendMouseMoveEvent(dx, dy, game)
 end
 
 -------------------------------------------------
