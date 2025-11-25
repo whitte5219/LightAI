@@ -1,107 +1,18 @@
---[[
-    LightAI - GUI + Chat AI (OpenAI Responses API)
+---------------------------------------------------------
+--  LIGHTAI — COHERE VERSION (WORKING)
+--  Put this at the top of your script:
+---------------------------------------------------------
 
-    WARNING:
-    - This script calls OpenAI directly from Roblox.
-    - If you put your real API key in a public GitHub repo, anyone can steal it.
-]]
-
------------------------
--- CONFIG
------------------------
-local WINDOW_WIDTH = 600
-local WINDOW_HEIGHT = 380
-local SIDEBAR_WIDTH = 150
-local PAGE_MARGIN = 10
-
--- ========= OPENAI CONFIG =========
--- DO NOT PUT REAL KEY HERE
-local OPENAI_KEY = (getgenv and getgenv().LIGHTAI_KEY) or "NO_KEY_SET"
-
--- New OpenAI Responses endpoint
-local API_URL = "https://api.openai.com/v1/responses"
--- =================================
-
------------------------
--- SERVICES
------------------------
-local Players = game:GetService("Players")
-local TweenService = game:GetService("TweenService")
 local HttpService = game:GetService("HttpService")
 
-local localPlayer = Players.LocalPlayer or Players:GetPlayers()[1]
+local COHERE_KEY = (getgenv and getgenv().LIGHTAI_KEY) or "NO_KEY_SET"
 
------------------------
--- AI CORE (CHAT + HISTORY)
------------------------
-local AI = {
-    Instructions = "You are LightAI, an experimental assistant controlled from a Roblox GUI. Be concise and safe.",
-    Mode = "Advanced",
-    History = {},
-    MaxHistory = 20,
-}
+local API_URL = "https://api.cohere.ai/v1/chat"
 
-local outputFrame
-local outputListLayout
-local sending = false
-
-local function addToHistory(role, text)
-    table.insert(AI.History, { role = role, text = text })
-    if #AI.History > AI.MaxHistory then
-        table.remove(AI.History, 1)
-    end
-end
-
-local function createLogLabel(role, text)
-    if not outputFrame then return end
-
-    local label = Instance.new("TextLabel")
-    label.BackgroundTransparency = 1
-    label.Size = UDim2.new(1, -10, 0, 0)
-    label.AutomaticSize = Enum.AutomaticSize.Y
-    label.Font = Enum.Font.Gotham
-    label.TextWrapped = true
-    label.TextXAlignment = Enum.TextXAlignment.Left
-    label.TextYAlignment = Enum.TextYAlignment.Top
-    label.TextSize = 14
-
-    local prefix
-    if role == "user" then
-        prefix = "You: "
-        label.TextColor3 = Color3.fromRGB(255, 255, 255)
-    elseif role == "ai" then
-        prefix = "LightAI: "
-        label.TextColor3 = Color3.fromRGB(220, 220, 220)
-    else
-        prefix = "[System]: "
-        label.TextColor3 = Color3.fromRGB(200, 200, 200)
-    end
-
-    label.Text = prefix .. text
-    label.Parent = outputFrame
-
-    task.wait()
-    if outputListLayout then
-        local contentSize = outputListLayout.AbsoluteContentSize
-        outputFrame.CanvasSize = UDim2.new(0, 0, 0, contentSize.Y + 10)
-        outputFrame.CanvasPosition = Vector2.new(0, math.max(0, contentSize.Y - outputFrame.AbsoluteSize.Y))
-    end
-end
-
-local function Log(role, text)
-    addToHistory(role, text)
-    createLogLabel(role, text)
-end
-
------------------------
--- HTTP HELPER (OpenAI)
------------------------
+---------------------------------------------------------
+--  HTTP FUNCTION (WORKS WITH EXECUTORS + ROBLOX)
+---------------------------------------------------------
 local function httpPostJson(url, jsonBody)
-    local headers = {
-        ["Content-Type"] = "application/json",
-        ["Authorization"] = "Bearer " .. OPENAI_KEY,
-    }
-
     local httpRequest =
         (syn and syn.request)
         or (http and http.request)
@@ -109,50 +20,46 @@ local function httpPostJson(url, jsonBody)
         or request
         or (fluxus and fluxus.request)
 
+    local headers = {
+        ["Content-Type"] = "application/json",
+        ["Authorization"] = "Bearer " .. COHERE_KEY,
+        ["Cohere-Version"] = "2022-12-06"
+    }
+
     if httpRequest then
         local resp = httpRequest({
             Url = url,
             Method = "POST",
             Headers = headers,
-            Body = jsonBody,
+            Body = jsonBody
         })
-        if not resp then
-            error("Exploit HTTP returned nil response")
-        end
-        local body = resp.Body or resp.body
-        if not body then
-            error("Exploit HTTP response has no Body")
-        end
-        return body
+        return resp and (resp.Body or resp.body)
     else
-        local ok, resp = pcall(function()
-            return HttpService:RequestAsync({
-                Url = url,
-                Method = "POST",
-                Headers = headers,
-                Body = jsonBody,
-            })
-        end)
-
-        if not ok or not resp then
-            error("HttpService.RequestAsync failed")
-        end
-
-        if not resp.Success then
-            error("HTTP " .. tostring(resp.StatusCode) .. " " .. tostring(resp.StatusMessage) ..
-                " | " .. tostring(resp.Body))
-        end
-
-        return resp.Body
+        return HttpService:PostAsync(
+            url,
+            jsonBody,
+            Enum.HttpContentType.ApplicationJson,
+            false,
+            headers
+        )
     end
 end
 
------------------------
--- CALL OPENAI (Responses API)
------------------------
-local function CallLightAI(userText)
+---------------------------------------------------------
+--  COHERE RESPONSE PARSER
+---------------------------------------------------------
+local function extractCohereReply(json)
+    if not json then return nil end
+    if not json.text then return nil end
+    return json.text
+end
+
+---------------------------------------------------------
+--  YOUR AI CALL FUNCTION
+---------------------------------------------------------
+function CallLightAI(userText)
     if sending then
-        Log("system", "Please wait, still responding...")
+        Log("system", "Still responding…")
         return
     end
     if not userText or userText == "" then return end
@@ -162,61 +69,69 @@ local function CallLightAI(userText)
 
     task.spawn(function()
         local ok, result = pcall(function()
-            -- Build input messages array for Responses API
-            local messages = {
-                { role = "system", content = AI.Instructions }
-            }
+
+            ---------------------------------------------------------
+            -- BUILD COHERE PAYLOAD
+            ---------------------------------------------------------
+            local messages = {}
+
+            table.insert(messages, {
+                role = "system",
+                content = AI.Instructions
+            })
 
             for _, h in ipairs(AI.History) do
-                if h.role == "user" or h.role == "ai" then
-                    local role = (h.role == "ai") and "assistant" or "user"
-                    table.insert(messages, {
-                        role = role,
-                        content = h.text
-                    })
-                end
+                table.insert(messages, {
+                    role = (h.role == "ai" and "assistant" or "user"),
+                    content = h.text
+                })
             end
 
-            table.insert(messages, { role = "user", content = userText })
+            table.insert(messages, {
+                role = "user",
+                content = userText
+            })
 
             local payload = {
-                model = "gpt-4o-mini",
-                input = messages,
+                model = "command-r", -- Cohere's chat model
+                messages = messages,
             }
 
-            local json = HttpService:JSONEncode(payload)
-            local body = httpPostJson(API_URL, json)
-            if not body then
-                error("Empty response body")
+            local body = HttpService:JSONEncode(payload)
+            local raw = httpPostJson(API_URL, body)
+
+            if not raw then
+                error("No response from Cohere")
             end
 
-            local okDecode, data = pcall(function()
-                return HttpService:JSONDecode(body)
-            end)
-            if not okDecode then
-                error("Can't parse JSON. Raw body: " .. tostring(body))
-            end
+            print("RAW:", raw)
 
-            -- New Responses API convenience field
-            local reply = data.output_text
+            local decoded = HttpService:JSONDecode(raw)
+            local reply = extractCohereReply(decoded)
 
-            if not reply or reply == "" then
-                -- show some raw info so we actually see the problem
-                reply = "(no output_text from OpenAI)\nRaw: " .. string.sub(HttpService:JSONEncode(data), 1, 200)
-            end
-
-            return reply
+            return reply, raw
         end)
 
         if ok then
-            Log("ai", result)
+            local reply, raw = result[1], result[2]
+
+            if reply then
+                Log("ai", reply)
+            else
+                Log("ai", "(no reply from Cohere)")
+                Log("system", "Raw: " .. tostring(raw))
+            end
         else
-            Log("system", "Error talking to OpenAI: " .. tostring(result))
+            Log("system", "Error: " .. tostring(result))
         end
 
         sending = false
     end)
 end
+
+---------------------------------------------------------
+--  END COHERE ENGINE
+---------------------------------------------------------
 
 -----------------------
 -- ROOT GUI
