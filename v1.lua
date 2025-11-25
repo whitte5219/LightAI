@@ -38,6 +38,7 @@ Correct format (no comments):
 {"actions":[
   {"type":"MOVE","direction":"forward","time":0.5},
   {"type":"JUMP"}
+]}
 
 Rules:
 - action types: "MOVE", "JUMP"
