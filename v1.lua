@@ -278,8 +278,6 @@ end
 
 local PathfindingService = game:GetService("PathfindingService")
 
-local PathfindingService = game:GetService("PathfindingService")
-
 local function walkToNearest()
     local target = getNearestPlayer()
     if not target or not target.Character or not target.Character:FindFirstChild("HumanoidRootPart") then
@@ -290,97 +288,82 @@ local function walkToNearest()
     if not myChar or not myChar:FindFirstChild("HumanoidRootPart") then return end
 
     local root = myChar.HumanoidRootPart
-    local MAX_TIME = 12
-    local trackStart = tick()
-    local lastUpdate = 0
 
-    -- Make sure no old movement keys are held
+    local MAX_TIME = 10
+    local REPATH_RATE = 0.5
+    local startTime = tick()
+    local lastPathTime = 0
+
+    -- Release all keys
     pressKeyUp(Enum.KeyCode.W)
-    pressKeyUp(Enum.KeyCode.S)
     pressKeyUp(Enum.KeyCode.A)
+    pressKeyUp(Enum.KeyCode.S)
     pressKeyUp(Enum.KeyCode.D)
 
-    while tick() - trackStart < MAX_TIME do
-
-        -- Stop if target disappears
-        if not target.Character or not target.Character:FindFirstChild("HumanoidRootPart") then
-            break
-        end
+    while tick() - startTime < MAX_TIME do
+        if not target.Character or not target.Character:FindFirstChild("HumanoidRootPart") then break end
 
         local targetPos = target.Character.HumanoidRootPart.Position
         local myPos = root.Position
 
-        -- STOP if within 1 stud
+        -- Stop if within 1 stud
         if (targetPos - myPos).Magnitude <= 1 then
             break
         end
 
-        -- UPDATE path every 0.5 seconds
-        if tick() - lastUpdate >= 0.5 then
-            lastUpdate = tick()
+        -- Recompute path every 0.5 sec
+        if tick() - lastPathTime >= REPATH_RATE then
+            lastPathTime = tick()
 
-            -- Compute path
             local path = PathfindingService:CreatePath({
                 AgentRadius = 2,
                 AgentHeight = 5,
                 AgentCanJump = true
             })
 
-            local success = pcall(function()
+            local ok = pcall(function()
                 path:ComputeAsync(myPos, targetPos)
             end)
 
-            if success and path.Status == Enum.PathStatus.Success then
-                local waypoints = path:GetWaypoints()
+            if ok and path.Status == Enum.PathStatus.Success then
+                local points = path:GetWaypoints()
 
-                for _, wp in ipairs(waypoints) do
-                    if not target.Character or not target.Character:FindFirstChild("HumanoidRootPart") then break end
-                    if tick() - trackStart > MAX_TIME then break end
-
+                for i = 1, #points do
+                    local wp = points[i]
                     local wpPos = wp.Position
 
-                    -- STOP early if close to target
+                    -- STOP if close to target
                     if (target.Character.HumanoidRootPart.Position - root.Position).Magnitude <= 1 then
                         break
                     end
 
-                    -- CAMERA-BASED MOVEMENT
-                    local camera = workspace.CurrentCamera
-                    local forward = camera.CFrame.LookVector
-                    local right = camera.CFrame.RightVector
-                    local diff = (wpPos - root.Position).Unit
+                    -- COMPUTE RAW WORLD DIRECTION
+                    local delta = wpPos - root.Position
 
-                    local fDot = diff:Dot(forward)
-                    local rDot = diff:Dot(right)
-
-                    -- Reset keys
+                    -- Reset movement keys
                     pressKeyUp(Enum.KeyCode.W)
-                    pressKeyUp(Enum.KeyCode.S)
                     pressKeyUp(Enum.KeyCode.A)
+                    pressKeyUp(Enum.KeyCode.S)
                     pressKeyUp(Enum.KeyCode.D)
 
-                    -- Forward/back
-                    if fDot > 0.2 then pressKeyDown(Enum.KeyCode.W)
-                    elseif fDot < -0.2 then pressKeyDown(Enum.KeyCode.S)
-                    end
+                    -- X axis (left / right)
+                    if delta.X > 1 then pressKeyDown(Enum.KeyCode.D) end
+                    if delta.X < -1 then pressKeyDown(Enum.KeyCode.A) end
 
-                    -- Left/right
-                    if rDot > 0.2 then pressKeyDown(Enum.KeyCode.D)
-                    elseif rDot < -0.2 then pressKeyDown(Enum.KeyCode.A)
-                    end
+                    -- Z axis (forward / back)
+                    if delta.Z < -1 then pressKeyDown(Enum.KeyCode.W) end
+                    if delta.Z > 1 then pressKeyDown(Enum.KeyCode.S) end
 
-                    -- Jump if waypoint requires
+                    -- Jump if required
                     if wp.Action == Enum.PathWaypointAction.Jump then
                         pressKey(Enum.KeyCode.Space, 0.1)
                     end
 
-                    -- Walk toward waypoint
+                    -- Walk until close to waypoint
                     while (root.Position - wpPos).Magnitude > 2 do
+                        if tick() - startTime > MAX_TIME then break end
+                        if (target.Character.HumanoidRootPart.Position - root.Position).Magnitude <= 1 then break end
                         if not target.Character then break end
-                        if tick() - trackStart > MAX_TIME then break end
-                        if (target.Character.HumanoidRootPart.Position - root.Position).Magnitude <= 1 then
-                            break
-                        end
                         RunService.Heartbeat:Wait()
                     end
                 end
@@ -390,10 +373,10 @@ local function walkToNearest()
         RunService.Heartbeat:Wait()
     end
 
-    -- Release all keys at end
+    -- Release all movement keys at end
     pressKeyUp(Enum.KeyCode.W)
-    pressKeyUp(Enum.KeyCode.S)
     pressKeyUp(Enum.KeyCode.A)
+    pressKeyUp(Enum.KeyCode.S)
     pressKeyUp(Enum.KeyCode.D)
 end
 
