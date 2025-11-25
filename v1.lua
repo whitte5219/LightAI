@@ -117,7 +117,7 @@ end
 -- COHERE CONFIG + HTTP
 -----------------------
 local COHERE_KEY = (getgenv and getgenv().LIGHTAI_KEY) or "NO_KEY_SET"
-local COHERE_MODEL = "command"           -- choose a valid model from your Cohere account
+local COHERE_MODEL = "command-a-vision-07-2025"           -- choose a valid model from your Cohere account
 local API_URL = "https://api.cohere.ai/v1/chat"
 
 local function httpPostJson(url, jsonBody)
