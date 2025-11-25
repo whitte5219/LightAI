@@ -1,10 +1,7 @@
 -- AI Controller GUI Script for Roblox
--- Place this in a ScreenGui in StarterGui
+-- Place this in a LocalScript within StarterGui
 
 local Players = game:GetService("Players")
-local TweenService = game:GetService("TweenService")
-local UserInputService = game:GetService("UserInputService")
-
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
@@ -16,8 +13,8 @@ screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 -- Main frame
 local mainFrame = Instance.new("Frame")
 mainFrame.Name = "MainFrame"
-mainFrame.Size = UDim2.new(0, 700, 0, 800)
-mainFrame.Position = UDim2.new(0.5, -350, 0.5, -400)
+mainFrame.Size = UDim2.new(0, 700, 0, 600) -- Reduced height
+mainFrame.Position = UDim2.new(0.5, -350, 0.5, -300)
 mainFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 mainFrame.BorderSizePixel = 0
 mainFrame.Parent = screenGui
@@ -46,150 +43,18 @@ closeButton.TextSize = 14
 closeButton.Font = Enum.Font.GothamBold
 closeButton.Parent = mainFrame
 
--- AI Mode Selection Frame
-local modeFrame = createLabelFrame("AI Learning Mode", UDim2.new(0.9, 0, 0, 150), UDim2.new(0.05, 0, 0.07, 0))
-local modeLayout = Instance.new("UIListLayout")
-modeLayout.Padding = UDim.new(0, 5)
-modeLayout.Parent = modeFrame
-
-local modes = {
-    {Name = "Quick Learning", Value = "quick", Desc = "Fast learning, focuses on main patterns"},
-    {Name = "Balanced", Value = "balanced", Desc = "Balanced between speed and depth"},
-    {Name = "Advanced Analysis", Value = "advanced", Desc = "Detailed study, deep pattern recognition"},
-    {Name = "Experimental", Value = "experimental", Desc = "Tries unconventional approaches"}
-}
-
-local currentMode = "balanced"
-
-for i, mode in ipairs(modes) do
-    local modeButton = Instance.new("TextButton")
-    modeButton.Name = mode.Value
-    modeButton.Size = UDim2.new(1, 0, 0, 30)
-    modeButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-    modeButton.Text = mode.Name
-    modeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    modeButton.TextSize = 14
-    modeButton.Font = Enum.Font.Gotham
-    
-    local descLabel = Instance.new("TextLabel")
-    descLabel.Name = "Desc"
-    descLabel.Size = UDim2.new(1, 0, 0, 15)
-    descLabel.BackgroundTransparency = 1
-    descLabel.Text = mode.Desc
-    descLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
-    descLabel.TextSize = 10
-    descLabel.Font = Enum.Font.Gotham
-    descLabel.Parent = modeButton
-    
-    modeButton.Parent = modeFrame
-    
-    modeButton.MouseButton1Click:Connect(function()
-        currentMode = mode.Value
-        updateModeButtons()
-    end)
-end
-
--- Learning Parameters Frame
-local paramsFrame = createLabelFrame("Learning Parameters", UDim2.new(0.9, 0, 0, 120), UDim2.new(0.05, 0, 0.3, 0))
-
--- Learning Speed Slider
-local speedLabel = Instance.new("TextLabel")
-speedLabel.Size = UDim2.new(1, 0, 0, 20)
-speedLabel.Position = UDim2.new(0, 0, 0, 5)
-speedLabel.BackgroundTransparency = 1
-speedLabel.Text = "Learning Speed: 50%"
-speedLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-speedLabel.TextSize = 14
-speedLabel.Font = Enum.Font.Gotham
-speedLabel.TextXAlignment = Enum.TextXAlignment.Left
-speedLabel.Parent = paramsFrame
-
-local speedSlider = createSlider(UDim2.new(0, 0, 0, 30), 0.5)
-speedSlider.Parent = paramsFrame
-
--- Exploration Rate Slider
-local exploreLabel = Instance.new("TextLabel")
-exploreLabel.Size = UDim2.new(1, 0, 0, 20)
-exploreLabel.Position = UDim2.new(0, 0, 0, 65)
-exploreLabel.BackgroundTransparency = 1
-exploreLabel.Text = "Exploration Rate: 70%"
-exploreLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-exploreLabel.TextSize = 14
-exploreLabel.Font = Enum.Font.Gotham
-exploreLabel.TextXAlignment = Enum.TextXAlignment.Left
-exploreLabel.Parent = paramsFrame
-
-local exploreSlider = createSlider(UDim2.new(0, 0, 0, 90), 0.7)
-exploreSlider.Parent = paramsFrame
-
--- Instructions Frame
-local instructionsFrame = createLabelFrame("AI Instructions & Hints", UDim2.new(0.9, 0, 0, 150), UDim2.new(0.05, 0, 0.5, 0))
-
-local instructionsBox = Instance.new("TextBox")
-instructionsBox.Name = "InstructionsBox"
-instructionsBox.Size = UDim2.new(0.95, 0, 0, 80)
-instructionsBox.Position = UDim2.new(0.025, 0, 0.1, 0)
-instructionsBox.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-instructionsBox.TextColor3 = Color3.fromRGB(255, 255, 255)
-instructionsBox.Text = "Enter instructions for the AI here..."
-instructionsBox.TextSize = 12
-instructionsBox.Font = Enum.Font.Gotham
-instructionsBox.TextWrapped = true
-instructionsBox.ClearTextOnFocus = false
-instructionsBox.MultiLine = true
-instructionsBox.Parent = instructionsFrame
-
--- Quick Hints Buttons
-local hintsFrame = Instance.new("Frame")
-hintsFrame.Name = "HintsFrame"
-hintsFrame.Size = UDim2.new(0.95, 0, 0, 30)
-hintsFrame.Position = UDim2.new(0.025, 0, 0.7, 0)
-hintsFrame.BackgroundTransparency = 1
-hintsFrame.Parent = instructionsFrame
-
-local hints = {"Focus on defense", "Be aggressive", "Learn combos", "Watch patterns"}
-for i, hint in ipairs(hints) do
-    local hintButton = Instance.new("TextButton")
-    hintButton.Name = hint
-    hintButton.Size = UDim2.new(0.23, 0, 1, 0)
-    hintButton.Position = UDim2.new((i-1) * 0.25, 0, 0, 0)
-    hintButton.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
-    hintButton.Text = hint
-    hintButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    hintButton.TextSize = 10
-    hintButton.Font = Enum.Font.Gotham
-    hintButton.TextWrapped = true
-    hintButton.Parent = hintsFrame
-    
-    hintButton.MouseButton1Click:Connect(function()
-        instructionsBox.Text = instructionsBox.Text .. "\n" .. hint
-    end)
-end
-
--- Control Buttons Frame
-local controlFrame = Instance.new("Frame")
-controlFrame.Name = "ControlFrame"
-controlFrame.Size = UDim2.new(0.9, 0, 0, 50)
-controlFrame.Position = UDim2.new(0.05, 0, 0.85, 0)
-controlFrame.BackgroundTransparency = 1
-controlFrame.Parent = mainFrame
-
-local startButton = createControlButton("Start AI Learning", UDim2.new(0, 0, 0, 0))
-local stopButton = createControlButton("Stop AI", UDim2.new(0.34, 0, 0, 0))
-local applyButton = createControlButton("Apply Settings", UDim2.new(0.68, 0, 0, 0))
-
-startButton.Parent = controlFrame
-stopButton.Parent = controlFrame
-applyButton.Parent = controlFrame
-
 -- Function to create labeled frames
-function createLabelFrame(title, size, position)
+local function createLabelFrame(title, size, position)
     local frame = Instance.new("Frame")
     frame.Name = title .. "Frame"
     frame.Size = size
     frame.Position = position
     frame.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
     frame.BorderSizePixel = 0
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 8)
+    corner.Parent = frame
     
     local titleLabel = Instance.new("TextLabel")
     titleLabel.Name = "Title"
@@ -202,17 +67,45 @@ function createLabelFrame(title, size, position)
     titleLabel.Font = Enum.Font.GothamBold
     titleLabel.Parent = frame
     
+    local titleCorner = Instance.new("UICorner")
+    titleCorner.CornerRadius = UDim.new(0, 8)
+    titleCorner.Parent = titleLabel
+    
     return frame
 end
 
 -- Function to create sliders
-function createSlider(position, initialValue)
+local function createSlider(parent, labelText, initialValue, positionY)
+    local sliderContainer = Instance.new("Frame")
+    sliderContainer.Name = "SliderContainer"
+    sliderContainer.Size = UDim2.new(0.9, 0, 0, 60)
+    sliderContainer.Position = UDim2.new(0.05, 0, positionY, 0)
+    sliderContainer.BackgroundTransparency = 1
+    sliderContainer.Parent = parent
+    
+    local label = Instance.new("TextLabel")
+    label.Name = "Label"
+    label.Size = UDim2.new(1, 0, 0, 20)
+    label.Position = UDim2.new(0, 0, 0, 0)
+    label.BackgroundTransparency = 1
+    label.Text = labelText .. ": " .. math.floor(initialValue * 100) .. "%"
+    label.TextColor3 = Color3.fromRGB(255, 255, 255)
+    label.TextSize = 14
+    label.Font = Enum.Font.Gotham
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Parent = sliderContainer
+    
     local sliderFrame = Instance.new("Frame")
     sliderFrame.Name = "SliderFrame"
     sliderFrame.Size = UDim2.new(1, 0, 0, 20)
-    sliderFrame.Position = position
+    sliderFrame.Position = UDim2.new(0, 0, 0, 25)
     sliderFrame.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
     sliderFrame.BorderSizePixel = 0
+    sliderFrame.Parent = sliderContainer
+    
+    local sliderCorner = Instance.new("UICorner")
+    sliderCorner.CornerRadius = UDim.new(0, 10)
+    sliderCorner.Parent = sliderFrame
     
     local fill = Instance.new("Frame")
     fill.Name = "Fill"
@@ -222,21 +115,23 @@ function createSlider(position, initialValue)
     fill.BorderSizePixel = 0
     fill.Parent = sliderFrame
     
-    local sliderButton = Instance.new("TextButton")
-    sliderButton.Name = "SliderButton"
-    sliderButton.Size = UDim2.new(1, 0, 1, 0)
-    sliderButton.BackgroundTransparency = 1
-    sliderButton.Text = ""
-    sliderButton.Parent = sliderFrame
+    local fillCorner = Instance.new("UICorner")
+    fillCorner.CornerRadius = UDim.new(0, 10)
+    fillCorner.Parent = fill
     
-    return sliderFrame
+    return {
+        container = sliderContainer,
+        label = label,
+        fill = fill,
+        value = initialValue
+    }
 end
 
 -- Function to create control buttons
-function createControlButton(text, position)
+local function createControlButton(text, position, size)
     local button = Instance.new("TextButton")
     button.Name = text .. "Button"
-    button.Size = UDim2.new(0.3, 0, 1, 0)
+    button.Size = size or UDim2.new(0.3, 0, 0, 40)
     button.Position = position
     button.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
     button.Text = text
@@ -244,24 +139,126 @@ function createControlButton(text, position)
     button.TextSize = 14
     button.Font = Enum.Font.Gotham
     
+    local buttonCorner = Instance.new("UICorner")
+    buttonCorner.CornerRadius = UDim.new(0, 6)
+    buttonCorner.Parent = button
+    
     return button
 end
 
+-- AI Mode Selection Frame
+local modeFrame = createLabelFrame("AI Learning Mode", UDim2.new(0.9, 0, 0, 180), UDim2.new(0.05, 0, 0.1, 0))
+modeFrame.Parent = mainFrame
+
+local modes = {
+    {Name = "Quick Learning", Value = "quick", Desc = "Fast learning, focuses on main patterns"},
+    {Name = "Balanced", Value = "balanced", Desc = "Balanced between speed and depth"},
+    {Name = "Advanced Analysis", Value = "advanced", Desc = "Detailed study, deep pattern recognition"},
+    {Name = "Experimental", Value = "experimental", Desc = "Tries unconventional approaches"}
+}
+
+local currentMode = "balanced"
+local modeButtons = {}
+
+local modeLayout = Instance.new("UIListLayout")
+modeLayout.Padding = UDim.new(0, 8)
+modeLayout.Parent = modeFrame
+
+for i, mode in ipairs(modes) do
+    local modeButton = Instance.new("TextButton")
+    modeButton.Name = mode.Value
+    modeButton.Size = UDim2.new(0.9, 0, 0, 35)
+    modeButton.Position = UDim2.new(0.05, 0, 0, (i-1) * 40 + 30)
+    modeButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+    modeButton.Text = mode.Name
+    modeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    modeButton.TextSize = 14
+    modeButton.Font = Enum.Font.Gotham
+    modeButton.Parent = modeFrame
+    
+    local modeCorner = Instance.new("UICorner")
+    modeCorner.CornerRadius = UDim.new(0, 6)
+    modeCorner.Parent = modeButton
+    
+    local descLabel = Instance.new("TextLabel")
+    descLabel.Name = "Desc"
+    descLabel.Size = UDim2.new(0.9, 0, 0, 12)
+    descLabel.Position = UDim2.new(0.05, 0, 0, (i-1) * 40 + 55)
+    descLabel.BackgroundTransparency = 1
+    descLabel.Text = mode.Desc
+    descLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+    descLabel.TextSize = 9
+    descLabel.Font = Enum.Font.Gotham
+    descLabel.TextXAlignment = Enum.TextXAlignment.Left
+    descLabel.Parent = modeFrame
+    
+    table.insert(modeButtons, modeButton)
+    
+    modeButton.MouseButton1Click:Connect(function()
+        currentMode = mode.Value
+        updateModeButtons()
+    end)
+end
+
 -- Function to update mode buttons appearance
-function updateModeButtons()
-    for _, child in ipairs(modeFrame:GetChildren()) do
-        if child:IsA("TextButton") then
-            if child.Name == currentMode then
-                child.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
-            else
-                child.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-            end
+local function updateModeButtons()
+    for _, button in ipairs(modeButtons) do
+        if button.Name == currentMode then
+            button.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
+        else
+            button.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
         end
     end
 end
 
 -- Initialize mode buttons
 updateModeButtons()
+
+-- Learning Parameters Frame
+local paramsFrame = createLabelFrame("Learning Parameters", UDim2.new(0.9, 0, 0, 130), UDim2.new(0.05, 0, 0.4, 0))
+paramsFrame.Parent = mainFrame
+
+-- Create sliders
+local speedSlider = createSlider(paramsFrame, "Learning Speed", 0.5, 0.1)
+local exploreSlider = createSlider(paramsFrame, "Exploration Rate", 0.7, 0.55)
+
+-- Instructions Frame
+local instructionsFrame = createLabelFrame("AI Instructions", UDim2.new(0.9, 0, 0, 120), UDim2.new(0.05, 0, 0.65, 0))
+instructionsFrame.Parent = mainFrame
+
+local instructionsBox = Instance.new("TextBox")
+instructionsBox.Name = "InstructionsBox"
+instructionsBox.Size = UDim2.new(0.9, 0, 0, 60)
+instructionsBox.Position = UDim2.new(0.05, 0, 0.2, 0)
+instructionsBox.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+instructionsBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+instructionsBox.PlaceholderText = "Enter instructions for the AI here..."
+instructionsBox.TextSize = 12
+instructionsBox.Font = Enum.Font.Gotham
+instructionsBox.TextWrapped = true
+instructionsBox.ClearTextOnFocus = false
+instructionsBox.MultiLine = true
+instructionsBox.Parent = instructionsFrame
+
+local boxCorner = Instance.new("UICorner")
+boxCorner.CornerRadius = UDim.new(0, 6)
+boxCorner.Parent = instructionsBox
+
+-- Control Buttons Frame
+local controlFrame = Instance.new("Frame")
+controlFrame.Name = "ControlFrame"
+controlFrame.Size = UDim2.new(0.9, 0, 0, 50)
+controlFrame.Position = UDim2.new(0.05, 0, 0.9, 0)
+controlFrame.BackgroundTransparency = 1
+controlFrame.Parent = mainFrame
+
+local startButton = createControlButton("Start AI", UDim2.new(0, 0, 0, 0), UDim2.new(0.32, 0, 1, 0))
+local stopButton = createControlButton("Stop AI", UDim2.new(0.34, 0, 0, 0), UDim2.new(0.32, 0, 1, 0))
+local applyButton = createControlButton("Apply", UDim2.new(0.68, 0, 0, 0), UDim2.new(0.32, 0, 1, 0))
+
+startButton.Parent = controlFrame
+stopButton.Parent = controlFrame
+applyButton.Parent = controlFrame
 
 -- Button functionality
 startButton.MouseButton1Click:Connect(function()
