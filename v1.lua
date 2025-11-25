@@ -49,6 +49,7 @@ Rules:
   - {"type":"JUMP"}
 
 Again: output ONLY the JSON object. No extra text.]]
+
 local AI = {
     ChatInstructions = CHAT_INSTRUCTIONS,
     ControlInstructions = CONTROL_INSTRUCTIONS,
