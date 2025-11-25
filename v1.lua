@@ -116,7 +116,7 @@ local function CallLightAI(userText)
             local json = HttpService:JSONEncode(payload)
             local body
 
-            -- 1) try exploit HTTP (syn.request / http.request / request / http_request / fluxus.request)
+            -- try exploit HTTP first
             local httpRequest = (syn and syn.request)
                 or (http and http.request)
                 or http_request
@@ -132,18 +132,29 @@ local function CallLightAI(userText)
                     },
                     Body = json,
                 })
-
-                -- many executors use resp.Body or resp.body
-                body = (type(resp) == "table" and (resp.Body or resp.body)) or nil
-                if not body then
-                    error("Exploit HTTP returned no body")
-                end
+                body = resp and (resp.Body or resp.body)
             else
-                -- 2) fallback to normal Roblox HttpService:PostAsync (no .Success stuff)
-                body = HttpService:PostAsync(API_URL, json, Enum.HttpContentType.ApplicationJson, false)
+                -- fallback to HttpService
+                body = HttpService:PostAsync(
+                    API_URL,
+                    json,
+                    Enum.HttpContentType.ApplicationJson,
+                    false
+                )
             end
 
-            local data = HttpService:JSONDecode(body)
+            if not body then
+                error("Server returned empty body")
+            end
+
+            local okDecode, data = pcall(function()
+                return HttpService:JSONDecode(body)
+            end)
+
+            if not okDecode then
+                error("Can't parse JSON. Raw body: " .. tostring(body))
+            end
+
             return data.reply or "(no reply from server)"
         end)
 
@@ -156,7 +167,6 @@ local function CallLightAI(userText)
         sending = false
     end)
 end
-
 
 -----------------------
 -- ROOT GUI
