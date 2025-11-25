@@ -276,49 +276,98 @@ end
 -- ADVANCED ACTIONS
 -------------------------------------------------
 
+local PathfindingService = game:GetService("PathfindingService")
+
 local function walkToNearest()
-    local target = getNearestPlayer()
-    if not target then return end
+    local targetPlayer = getNearestPlayer()
+    if not targetPlayer or not targetPlayer.Character or not targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        return
+    end
 
     local myChar = player.Character
     if not myChar or not myChar:FindFirstChild("HumanoidRootPart") then return end
 
     local root = myChar.HumanoidRootPart
-    local maxTime = 6  -- safety timeout
+    local targetRoot = targetPlayer.Character.HumanoidRootPart
 
+    local MAX_TIME = 8
+    local REPATH_INTERVAL = 1.0
+    local startTime = tick()
+    local lastRepath = 0
+
+    -- release all keys
     pressKeyUp(Enum.KeyCode.W)
-    pressKeyUp(Enum.KeyCode.A)
     pressKeyUp(Enum.KeyCode.S)
+    pressKeyUp(Enum.KeyCode.A)
     pressKeyUp(Enum.KeyCode.D)
 
-    local startTime = tick()
+    while tick() - startTime < MAX_TIME do
+        if not targetPlayer.Character or not targetPlayer.Character:FindFirstChild("HumanoidRootPart") then break end
 
-    while tick() - startTime < maxTime do
-        if not target.Character or not target.Character:FindFirstChild("HumanoidRootPart") then break end
-
-        local tPos = target.Character.HumanoidRootPart.Position
         local myPos = root.Position
+        local targetPos = targetRoot.Position
 
-        local diff = tPos - myPos
-
-        -- Decide direction
-        pressKeyDown(Enum.KeyCode.W)
-
-        if diff.X > 2 then
-            pressKeyDown(Enum.KeyCode.D)
-        elseif diff.X < -2 then
-            pressKeyDown(Enum.KeyCode.A)
-        else
-            pressKeyUp(Enum.KeyCode.D)
-            pressKeyUp(Enum.KeyCode.A)
+        -- close enough
+        if (myPos - targetPos).Magnitude < 5 then
+            break
         end
 
-        if diff.Magnitude < 4 then break end
+        -- repath every 1 second
+        if tick() - lastRepath > REPATH_INTERVAL then
+            lastRepath = tick()
+
+            local path = PathfindingService:CreatePath({
+                AgentRadius = 2,
+                AgentHeight = 5,
+                AgentCanJump = true
+            })
+
+            local success = pcall(function()
+                path:ComputeAsync(myPos, targetPos)
+            end)
+
+            if success and path.Status == Enum.PathStatus.Success then
+                local waypoints = path:GetWaypoints()
+                
+                for _, wp in ipairs(waypoints) do
+                    if tick() - startTime > MAX_TIME then break end
+                    if not targetPlayer.Character or not targetPlayer.Character:FindFirstChild("HumanoidRootPart") then break end
+
+                    local wpPos = wp.Position
+                    local diff = (wpPos - root.Position)
+
+                    -- Determine horizontal direction
+                    pressKeyUp(Enum.KeyCode.W)
+                    pressKeyUp(Enum.KeyCode.S)
+                    pressKeyUp(Enum.KeyCode.A)
+                    pressKeyUp(Enum.KeyCode.D)
+
+                    if diff.Z < -1 then pressKeyDown(Enum.KeyCode.W) end
+                    if diff.Z > 1 then pressKeyDown(Enum.KeyCode.S) end
+                    if diff.X > 1 then pressKeyDown(Enum.KeyCode.D) end
+                    if diff.X < -1 then pressKeyDown(Enum.KeyCode.A) end
+
+                    -- jump if needed
+                    if wp.Action == Enum.PathWaypointAction.Jump then
+                        pressKey(Enum.KeyCode.Space, 0.1)
+                    end
+
+                    -- move until close to waypoint
+                    while (root.Position - wpPos).Magnitude > 3 do
+                        if tick() - startTime > MAX_TIME then break end
+                        if not targetPlayer.Character then break end
+                        RunService.Heartbeat:Wait()
+                    end
+                end
+            end
+        end
 
         RunService.Heartbeat:Wait()
     end
 
+    -- Release all movement keys
     pressKeyUp(Enum.KeyCode.W)
+    pressKeyUp(Enum.KeyCode.S)
     pressKeyUp(Enum.KeyCode.A)
     pressKeyUp(Enum.KeyCode.D)
 end
