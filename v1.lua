@@ -702,7 +702,6 @@ list.Padding = UDim.new(0, 4)
 list.FillDirection = Enum.FillDirection.Vertical
 list.SortOrder = Enum.SortOrder.LayoutOrder
 list.Parent = outputFrame
-outputFrame.UIListLayout = list
 
 -- show initial system message
 Log("system", "LightAI ready. Type a message in the AI Control tab.")
