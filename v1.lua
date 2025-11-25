@@ -197,7 +197,7 @@ local function httpPostJson(url, jsonBody)
 end
 
 -----------------------
--- CHARACTER CONTROL HELPERS (ADVANCED VERSION)
+-- CHARACTER CONTROL HELPERS (ADVANCED + FIXED)
 -----------------------
 
 local VirtualInputManager = game:GetService("VirtualInputManager")
@@ -232,11 +232,25 @@ local function pressMouse(time)
     VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 0)
 end
 
-local function moveMouse(dx, dy)
+-------------------------------------------------
+-- CAMERA ROTATION (NEW SYSTEM)
+-------------------------------------------------
+
+local function lookAt(dx, dy)
     dx = tonumber(dx) or 0
     dy = tonumber(dy) or 0
 
-    VirtualInputManager:SendMouseMoveEvent(dx, dy, game)
+    local camera = workspace.CurrentCamera
+    local cf = camera.CFrame
+
+    -- horizontal
+    cf = cf * CFrame.Angles(0, math.rad(-dx * 0.2), 0)
+
+    -- vertical with clamp
+    local x, y, z = cf:ToEulerAnglesXYZ()
+    y = math.clamp(y - math.rad(dy * 0.2), -1.2, 1.2)
+
+    camera.CFrame = CFrame.new(cf.Position) * CFrame.Angles(x, y, z)
 end
 
 -------------------------------------------------
@@ -248,14 +262,12 @@ local function getNearestPlayer()
     if not myChar or not myChar:FindFirstChild("HumanoidRootPart") then return nil end
 
     local myPos = myChar.HumanoidRootPart.Position
-    local nearest = nil
-    local nearestDist = math.huge
+    local nearest, nearestDist = nil, math.huge
 
     for _, plr in ipairs(Players:GetPlayers()) do
         if plr ~= player and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
             local pos = plr.Character.HumanoidRootPart.Position
             local dist = (myPos - pos).Magnitude
-
             if dist < nearestDist then
                 nearest = plr
                 nearestDist = dist
@@ -267,7 +279,7 @@ local function getNearestPlayer()
 end
 
 -------------------------------------------------
--- ADVANCED ACTIONS
+-- WALK TO NEAREST (FULLY FIXED)
 -------------------------------------------------
 
 local function walkToNearest()
@@ -283,7 +295,7 @@ local function walkToNearest()
     local MAX_TIME = 10
     local startTime = tick()
 
-    -- release all movement keys
+    -- release movement keys
     pressKeyUp(Enum.KeyCode.W)
     pressKeyUp(Enum.KeyCode.A)
     pressKeyUp(Enum.KeyCode.S)
@@ -296,34 +308,30 @@ local function walkToNearest()
         local myPos = root.Position
         local diff = targetPos - myPos
 
-        -- STOP within 1.5 studs
-        if diff.Magnitude <= 1.5 then
-            break
-        end
+        -- Rotate camera to face target
+        local cam = workspace.CurrentCamera
+        cam.CFrame = CFrame.new(cam.CFrame.Position, targetPos)
 
-        -- RELEASE KEYS FIRST
+        -- stop if close
+        if diff.Magnitude <= 1.5 then break end
+
+        -- reset keys
         pressKeyUp(Enum.KeyCode.W)
         pressKeyUp(Enum.KeyCode.S)
         pressKeyUp(Enum.KeyCode.A)
         pressKeyUp(Enum.KeyCode.D)
 
-        -- PURE WORLD-SPACE MOVEMENT
-        if diff.Z < -0.5 then
-            pressKeyDown(Enum.KeyCode.W)
-        elseif diff.Z > 0.5 then
-            pressKeyDown(Enum.KeyCode.S)
-        end
+        -- world-based movement
+        if diff.Z < -0.2 then pressKeyDown(Enum.KeyCode.W)
+        elseif diff.Z > 0.2 then pressKeyDown(Enum.KeyCode.S) end
 
-        if diff.X > 0.5 then
-            pressKeyDown(Enum.KeyCode.D)
-        elseif diff.X < -0.5 then
-            pressKeyDown(Enum.KeyCode.A)
-        end
+        if diff.X > 0.2 then pressKeyDown(Enum.KeyCode.D)
+        elseif diff.X < -0.2 then pressKeyDown(Enum.KeyCode.A) end
 
         RunService.Heartbeat:Wait()
     end
 
-    -- release keys when finished
+    -- release keys at end
     pressKeyUp(Enum.KeyCode.W)
     pressKeyUp(Enum.KeyCode.A)
     pressKeyUp(Enum.KeyCode.S)
@@ -331,7 +339,7 @@ local function walkToNearest()
 end
 
 -------------------------------------------------
--- WHILE ACTIONS (PARALLEL EXECUTION)
+-- WHILE ACTIONS
 -------------------------------------------------
 
 local function executeWhileAction(duration, actions)
@@ -339,7 +347,6 @@ local function executeWhileAction(duration, actions)
     local endTime = tick() + duration
     local lastJump = 0
 
-    -- Hold MOVE keys down
     local moveDirs = {}
 
     for _, act in ipairs(actions) do
@@ -366,7 +373,6 @@ local function executeWhileAction(duration, actions)
         RunService.Heartbeat:Wait()
     end
 
-    -- Release all movement keys
     pressKeyUp(Enum.KeyCode.W)
     pressKeyUp(Enum.KeyCode.S)
     pressKeyUp(Enum.KeyCode.A)
@@ -400,7 +406,7 @@ function executeActions(actions)
             pressMouse(0.1)
 
         elseif t == "LOOK" then
-            moveMouse(action.x, action.y)
+            lookAt(action.x, action.y)
 
         elseif t == "WAIT" then
             task.wait(tonumber(action.time) or 0.5)
