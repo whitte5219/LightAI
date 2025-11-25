@@ -27,7 +27,10 @@ local localPlayer = Players.LocalPlayer or Players:GetPlayers()[1]
 -- AI CORE (CHAT + HISTORY)
 -----------------------
 local AI = {
-    Instructions = "You are LightAI, an experimental assistant controlled from a Roblox GUI. Be concise, safe, and helpful.",
+    Instructions = "You are LightAI, a friendly gaming assistant inside Roblox. \
+Speak casually and like a normal player (you can use simple slang, short sentences, etc.). \
+You must still follow Cohere safety rules and refuse anything harmful, illegal or NSFW, \
+but for normal, safe questions you answer directly and naturally.",
     Mode = "Advanced",          -- or "Quick"
     History = {},               -- { {role="user"/"ai"/"system", text="..."}, ... }
     MaxHistory = 20,
