@@ -92,6 +92,7 @@ end
 -- COHERE CONFIG + HTTP
 -----------------------
 local COHERE_KEY = (getgenv and getgenv().LIGHTAI_KEY) or "NO_KEY_SET"
+local COHERE_MODEL = "command-a-vision-07-2025"
 local API_URL = "https://api.cohere.ai/v1/chat"
 
 local function httpPostJson(url, jsonBody)
@@ -183,7 +184,7 @@ function CallLightAI(userText)
             end
 
             local payload = {
-                model = "command-r",
+                model = COHERE_MODEL,
                 message = userText,
                 preamble = AI.Instructions,
                 chat_history = chat_history,
