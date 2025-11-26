@@ -1403,7 +1403,7 @@ outputFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
 outputFrame.Parent = outputBg
 
 outputListLayout = Instance.new("UIListLayout")
-outputListLayout.Padding = UDim2.new(0, 4)
+outputListLayout.Padding = UDim.new(0, 4)
 outputListLayout.FillDirection = Enum.FillDirection.Vertical
 outputListLayout.SortOrder = Enum.SortOrder.LayoutOrder
 outputListLayout.Parent = outputFrame
@@ -1497,7 +1497,7 @@ Log("system", "LightAI (Cohere) ready. Type a message below.")
 -- PAGE: GUI APPEARANCE (empty for now)
 -----------------------
 local guiAppearancePage = pages["GUI Appearance"]
--- (placeholder for future appearance settings)
+-- placeholder for future appearance options
 
 -----------------------
 -- PAGE: INFO
@@ -1516,7 +1516,7 @@ infoBody.CanvasSize = UDim2.new(0, 0, 0, 0)
 infoBody.Parent = infoPage
 
 local infoListLayout = Instance.new("UIListLayout")
-infoListLayout.Padding = UDim2.new(0, 8)
+infoListLayout.Padding = UDim.new(0, 8)
 infoListLayout.FillDirection = Enum.FillDirection.Vertical
 infoListLayout.SortOrder = Enum.SortOrder.LayoutOrder
 infoListLayout.Parent = infoBody
