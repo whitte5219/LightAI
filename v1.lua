@@ -33,6 +33,9 @@ local CONTROL_INSTRUCTIONS = [[You control the player's Roblox character.
 You MUST output ONLY a single JSON object and NOTHING ELSE.
 No explanations, no extra text, no code blocks.
 
+You will ALWAYS receive GAME INFO in JSON after the user message.
+Use that GAME INFO to decide what actions to output (for example, use distances, health, and obstacles).
+
 ALLOWED ACTION TYPES:
 
 MOVE:
@@ -57,17 +60,19 @@ WHILE example:
 {
   "type":"WHILE",
   "duration":seconds,
-  "actions":[ ... ]
+  "actions":[
+    {"type":"MOVE","direction":"forward"},
+    {"type":"JUMP"}
+  ]
 }
 
 OUTPUT FORMAT EXAMPLE:
 
 {"actions":[
-  { "type":"MOVE","direction":"forward","time":0.5" },
-  { "type":"JUMP" }
+  {"type":"MOVE","direction":"forward","time":0.5},
+  {"type":"JUMP"}
 ]}
 ]]
-
 
 local AI = {
     ChatInstructions = CHAT_INSTRUCTIONS,
@@ -201,9 +206,6 @@ end
 -----------------------
 
 local VirtualInputManager = game:GetService("VirtualInputManager")
-local RunService = game:GetService("RunService")
-local Players = game:GetService("Players")
-
 local player = Players.LocalPlayer
 
 -------------------------------------------------
@@ -279,6 +281,76 @@ local function getNearestPlayer()
 end
 
 -------------------------------------------------
+-- MAP SCAN + GAME STATE (PART 3)
+-------------------------------------------------
+
+local function scanMap()
+    local obstacles = {}
+    local maxObstacles = 15
+
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if #obstacles >= maxObstacles then break end
+
+        if obj:IsA("BasePart") and obj.CanCollide and obj.Size.Magnitude > 2 then
+            table.insert(obstacles, {
+                name = obj.Name,
+                position = { x = obj.Position.X, y = obj.Position.Y, z = obj.Position.Z },
+                size = { x = obj.Size.X, y = obj.Size.Y, z = obj.Size.Z },
+            })
+        end
+    end
+
+    return obstacles
+end
+
+local function getGameState()
+    local char = player.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+
+    local state = {
+        self = {
+            health = hum and hum.Health or 0,
+            position = root and { x = root.Position.X, y = root.Position.Y, z = root.Position.Z } or nil,
+        },
+        nearestPlayer = nil,
+        nearbyPlayers = {},
+        map = {
+            obstacles = scanMap()
+        }
+    }
+
+    -- nearest player
+    local nearest = getNearestPlayer()
+    if nearest and root and nearest.Character and nearest.Character:FindFirstChild("HumanoidRootPart") then
+        local nroot = nearest.Character.HumanoidRootPart
+        local nhum = nearest.Character:FindFirstChildOfClass("Humanoid")
+
+        state.nearestPlayer = {
+            name = nearest.Name,
+            health = nhum and nhum.Health or 0,
+            distance = (root.Position - nroot.Position).Magnitude,
+            position = { x = nroot.Position.X, y = nroot.Position.Y, z = nroot.Position.Z },
+        }
+    end
+
+    -- all nearby players
+    if root then
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if plr ~= player and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+                local nroot = plr.Character.HumanoidRootPart
+                table.insert(state.nearbyPlayers, {
+                    name = plr.Name,
+                    distance = (root.Position - nroot.Position).Magnitude
+                })
+            end
+        end
+    end
+
+    return state
+end
+
+-------------------------------------------------
 -- WALK TO NEAREST (FULLY FIXED)
 -------------------------------------------------
 
@@ -315,43 +387,41 @@ local function walkToNearest()
         -- stop if close
         if diff.Magnitude <= 1.5 then break end
 
+        -- CAMERA-BASED WASD MOVEMENT
+        local camera = workspace.CurrentCamera
+        local forward = (camera.CFrame.LookVector * Vector3.new(1, 0, 1))
+        local right = (camera.CFrame.RightVector * Vector3.new(1, 0, 1))
+
+        if forward.Magnitude > 0 then forward = forward.Unit end
+        if right.Magnitude > 0 then right = right.Unit end
+
+        local diffDir = (targetPos - myPos)
+        if diffDir.Magnitude > 0 then
+            diffDir = diffDir.Unit
+        end
+
+        local fDot = diffDir:Dot(forward)
+        local rDot = diffDir:Dot(right)
+
         -- reset keys
         pressKeyUp(Enum.KeyCode.W)
         pressKeyUp(Enum.KeyCode.S)
         pressKeyUp(Enum.KeyCode.A)
         pressKeyUp(Enum.KeyCode.D)
 
-       -- CAMERA-BASED WASD MOVEMENT (FIXED)
-local camera = workspace.CurrentCamera
-local forward = camera.CFrame.LookVector * Vector3.new(1,0,1) -- flatten
-local right = camera.CFrame.RightVector * Vector3.new(1,0,1)  -- flatten
-forward = forward.Unit
-right = right.Unit
+        -- Forward/back
+        if fDot > 0.2 then
+            pressKeyDown(Enum.KeyCode.W)
+        elseif fDot < -0.2 then
+            pressKeyDown(Enum.KeyCode.S)
+        end
 
-local diffDir = (targetPos - myPos).Unit
-
-local fDot = diffDir:Dot(forward)
-local rDot = diffDir:Dot(right)
-
--- Release keys
-pressKeyUp(Enum.KeyCode.W)
-pressKeyUp(Enum.KeyCode.S)
-pressKeyUp(Enum.KeyCode.A)
-pressKeyUp(Enum.KeyCode.D)
-
--- Forward/back
-if fDot > 0.2 then
-    pressKeyDown(Enum.KeyCode.W)
-elseif fDot < -0.2 then
-    pressKeyDown(Enum.KeyCode.S)
-end
-
--- Left/right
-if rDot > 0.2 then
-    pressKeyDown(Enum.KeyCode.D)
-elseif rDot < -0.2 then
-    pressKeyDown(Enum.KeyCode.A)
-end
+        -- Left/right
+        if rDot > 0.2 then
+            pressKeyDown(Enum.KeyCode.D)
+        elseif rDot < -0.2 then
+            pressKeyDown(Enum.KeyCode.A)
+        end
 
         RunService.Heartbeat:Wait()
     end
@@ -446,7 +516,7 @@ function executeActions(actions)
 end
 
 -----------------------
--- CALL COHERE
+-- CALL COHERE (UPDATED WITH GAME INFO)
 -----------------------
 function CallLightAI(userText)
     if sending then
@@ -470,13 +540,25 @@ function CallLightAI(userText)
                 end
             end
 
+            -- Game state (PART 3)
+            local gameInfo = getGameState()
+            local gameInfoJson = ""
+            local okGI, encoded = pcall(function()
+                return HttpService:JSONEncode(gameInfo)
+            end)
+            if okGI then
+                gameInfoJson = encoded
+            else
+                gameInfoJson = "{}"
+            end
+
             -- Select correct instructions
             local preamble = ControlCharacterEnabled and AI.ControlInstructions or AI.ChatInstructions
 
             -- Build payload
             local payload = {
                 model = COHERE_MODEL,
-                message = userText,
+                message = "USER MESSAGE:\n" .. userText .. "\n\nGAME INFO (JSON):\n" .. gameInfoJson,
                 preamble = preamble,
                 chat_history = chat_history,
                 stream = false,
