@@ -218,6 +218,24 @@ local player = Players.LocalPlayer
 -- saved position memory
 local SavedPosition = nil
 
+-- action tracking
+local currentActionLabel
+local stopActionButton
+local actionRunning = false
+local stopRequested = false
+
+local function setCurrentAction(text)
+    if currentActionLabel then
+        currentActionLabel.Text = "Action: " .. text
+    end
+end
+
+local function clearCurrentAction()
+    actionRunning = false
+    stopRequested = false
+    setCurrentAction("Idle")
+end
+
 -------------------------------------------------
 -- LOW-LEVEL INPUT FUNCTIONS
 -------------------------------------------------
@@ -230,18 +248,33 @@ local function pressKeyUp(key)
     VirtualInputManager:SendKeyEvent(false, key, false, game)
 end
 
-local function pressKey(keycode, time)
-    time = tonumber(time) or 0.3
-    pressKeyDown(keycode)
-    task.wait(time)
-    pressKeyUp(keycode)
-end
-
 local function pressMouse(time)
     time = tonumber(time) or 0.1
     VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 0)
-    task.wait(time)
+    local start = tick()
+    while tick() - start < time do
+        if stopRequested then break end
+        RunService.Heartbeat:Wait()
+    end
     VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 0)
+end
+
+local function pressKey(keycode, time)
+    time = tonumber(time) or 0.3
+    pressKeyDown(keycode)
+    local start = tick()
+    while tick() - start < time do
+        if stopRequested then break end
+        RunService.Heartbeat:Wait()
+    end
+    pressKeyUp(keycode)
+end
+
+local function releaseMovementKeys()
+    pressKeyUp(Enum.KeyCode.W)
+    pressKeyUp(Enum.KeyCode.A)
+    pressKeyUp(Enum.KeyCode.S)
+    pressKeyUp(Enum.KeyCode.D)
 end
 
 -------------------------------------------------
@@ -434,13 +467,11 @@ local function walkToPosition(targetPos, maxTime)
     maxTime = maxTime or 10
     local startTime = tick()
 
-    -- release movement keys
-    pressKeyUp(Enum.KeyCode.W)
-    pressKeyUp(Enum.KeyCode.A)
-    pressKeyUp(Enum.KeyCode.S)
-    pressKeyUp(Enum.KeyCode.D)
+    releaseMovementKeys()
 
     while tick() - startTime < maxTime do
+        if stopRequested then break end
+
         local myPos = root.Position
         local diff = targetPos - myPos
 
@@ -469,10 +500,7 @@ local function walkToPosition(targetPos, maxTime)
         local rDot = diffDir:Dot(right)
 
         -- reset keys
-        pressKeyUp(Enum.KeyCode.W)
-        pressKeyUp(Enum.KeyCode.S)
-        pressKeyUp(Enum.KeyCode.A)
-        pressKeyUp(Enum.KeyCode.D)
+        releaseMovementKeys()
 
         -- Forward/back
         if fDot > 0.2 then
@@ -491,10 +519,7 @@ local function walkToPosition(targetPos, maxTime)
         RunService.Heartbeat:Wait()
     end
 
-    pressKeyUp(Enum.KeyCode.W)
-    pressKeyUp(Enum.KeyCode.A)
-    pressKeyUp(Enum.KeyCode.S)
-    pressKeyUp(Enum.KeyCode.D)
+    releaseMovementKeys()
 end
 
 local function walkToPlayer(targetPlayer, maxTime)
@@ -507,6 +532,8 @@ local function walkToPlayer(targetPlayer, maxTime)
     local startTime = tick()
 
     while tick() - startTime < maxTime do
+        if stopRequested then break end
+
         if not targetPlayer.Character or not targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
             break
         end
@@ -515,10 +542,7 @@ local function walkToPlayer(targetPlayer, maxTime)
         walkToPosition(targetPos, 0.2) -- small chunk, then re-evaluate
     end
 
-    pressKeyUp(Enum.KeyCode.W)
-    pressKeyUp(Enum.KeyCode.A)
-    pressKeyUp(Enum.KeyCode.S)
-    pressKeyUp(Enum.KeyCode.D)
+    releaseMovementKeys()
 end
 
 local function walkToMode(mode, objectName)
@@ -587,6 +611,8 @@ local function executeWhileAction(duration, actions)
     if moveDirs["right"] then pressKeyDown(Enum.KeyCode.D) end
 
     while tick() < endTime do
+        if stopRequested then break end
+
         for _, act in ipairs(actions) do
             if act.type == "JUMP" then
                 if tick() - lastJump > 0.8 then
@@ -598,10 +624,56 @@ local function executeWhileAction(duration, actions)
         RunService.Heartbeat:Wait()
     end
 
-    pressKeyUp(Enum.KeyCode.W)
-    pressKeyUp(Enum.KeyCode.S)
-    pressKeyUp(Enum.KeyCode.A)
-    pressKeyUp(Enum.KeyCode.D)
+    releaseMovementKeys()
+end
+
+-------------------------------------------------
+-- ACTION DESCRIPTION (FOR UI)
+-------------------------------------------------
+
+local function describeAction(action)
+    if not action or type(action) ~= "table" then
+        return "Idle"
+    end
+
+    local t = action.type
+    if t == "MOVE" then
+        local dir = (action.direction or "unknown"):lower()
+        local time = tonumber(action.time) or 0
+        if time > 0 then
+            return string.format("walking %s (%.1fs)", dir, time)
+        else
+            return "walking " .. dir
+        end
+    elseif t == "JUMP" then
+        return "jumping"
+    elseif t == "WAIT" then
+        local time = tonumber(action.time) or 0
+        return string.format("waiting (%.1fs)", time)
+    elseif t == "CLICK" then
+        return "clicking"
+    elseif t == "LOOK" then
+        return "looking around"
+    elseif t == "WALK_TO_NEAREST" then
+        return "walking to nearest player"
+    elseif t == "WALK_TO" then
+        local mode = (action.mode or "nearest"):lower()
+        if mode == "object" then
+            local name = action.objectName or action.name or action.targetName or "object"
+            return "walking to object \"" .. tostring(name) .. "\""
+        elseif mode == "saved" then
+            return "walking to saved position"
+        else
+            return "walking to " .. mode .. " player"
+        end
+    elseif t == "SAVE_POSITION" then
+        return "saving position"
+    elseif t == "WHILE" then
+        local dur = tonumber(action.duration) or 0
+        return string.format("running while-block (%.1fs)", dur)
+    end
+
+    return "unknown action"
 end
 
 -------------------------------------------------
@@ -609,9 +681,20 @@ end
 -------------------------------------------------
 
 function executeActions(actions)
-    if type(actions) ~= "table" then return end
+    if type(actions) ~= "table" then
+        clearCurrentAction()
+        return
+    end
+
+    actionRunning = true
+    stopRequested = false
 
     for _, action in ipairs(actions) do
+        if stopRequested then
+            break
+        end
+
+        setCurrentAction(describeAction(action))
         local t = action.type
 
         if t == "MOVE" then
@@ -634,7 +717,12 @@ function executeActions(actions)
             lookAt(action.x, action.y)
 
         elseif t == "WAIT" then
-            task.wait(tonumber(action.time) or 0.5)
+            local duration = tonumber(action.time) or 0.5
+            local endTime = tick() + duration
+            while tick() < endTime do
+                if stopRequested then break end
+                RunService.Heartbeat:Wait()
+            end
 
         elseif t == "WALK_TO_NEAREST" then
             walkToNearest()
@@ -653,6 +741,9 @@ function executeActions(actions)
             executeWhileAction(action.duration, action.actions or {})
         end
     end
+
+    releaseMovementKeys()
+    clearCurrentAction()
 end
 
 -----------------------
@@ -1282,12 +1373,62 @@ end)
 -----------------------
 local aiOutputPage = pages["AI Output"]
 
+-- Action display row
+local actionFrame = Instance.new("Frame")
+actionFrame.Name = "ActionFrame"
+actionFrame.BackgroundTransparency = 1
+actionFrame.Size = UDim2.new(1, 0, 0, 24)
+actionFrame.Position = UDim2.new(0, 0, 0, 40)
+actionFrame.Parent = aiOutputPage
+
+currentActionLabel = Instance.new("TextLabel")
+currentActionLabel.BackgroundTransparency = 1
+currentActionLabel.Size = UDim2.new(0, 220, 1, 0)
+currentActionLabel.Font = Enum.Font.Gotham
+currentActionLabel.TextSize = 14
+currentActionLabel.TextXAlignment = Enum.TextXAlignment.Left
+currentActionLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
+currentActionLabel.Text = "Action: Idle"
+currentActionLabel.Parent = actionFrame
+
+stopActionButton = Instance.new("TextButton")
+stopActionButton.Name = "StopActionButton"
+stopActionButton.Size = UDim2.new(0, 100, 0, 22)
+stopActionButton.Position = UDim2.new(0, 230, 0, 1)
+stopActionButton.BackgroundColor3 = Color3.fromRGB(40, 0, 0)
+stopActionButton.BorderSizePixel = 0
+stopActionButton.AutoButtonColor = false
+stopActionButton.Font = Enum.Font.GothamBold
+stopActionButton.TextSize = 14
+stopActionButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+stopActionButton.Text = "Stop Action"
+stopActionButton.Parent = actionFrame
+
+local stopCorner = Instance.new("UICorner")
+stopCorner.CornerRadius = UDim.new(0, 10)
+stopCorner.Parent = stopActionButton
+
+local stopStroke = Instance.new("UIStroke")
+stopStroke.Color = Color3.fromRGB(255, 255, 255)
+stopStroke.Transparency = 0.7
+stopStroke.Thickness = 1
+stopStroke.Parent = stopActionButton
+
+stopActionButton.MouseButton1Click:Connect(function()
+    if not actionRunning then
+        return -- do nothing when idle
+    end
+    stopRequested = true
+    Log("system", "Stop requested. Current and remaining actions will be cancelled.")
+    releaseMovementKeys()
+end)
+
 -- Control Character toggle UI
 local toggleFrame = Instance.new("Frame")
 toggleFrame.Name = "ControlToggleFrame"
 toggleFrame.BackgroundTransparency = 1
 toggleFrame.Size = UDim2.new(1, 0, 0, 24)
-toggleFrame.Position = UDim2.new(0, 0, 0, 40)
+toggleFrame.Position = UDim2.new(0, 0, 0, 70)
 toggleFrame.Parent = aiOutputPage
 
 local toggleLabel = Instance.new("TextLabel")
@@ -1344,12 +1485,13 @@ toggleButton.MouseButton1Click:Connect(function()
 end)
 
 updateToggleVisual()
+clearCurrentAction()
 
 -- Output box
 local outputBg = Instance.new("Frame")
 outputBg.Name = "OutputBackground"
-outputBg.Size = UDim2.new(1, 0, 1, -70)
-outputBg.Position = UDim2.new(0, 0, 0, 70)
+outputBg.Size = UDim2.new(1, 0, 1, -100)
+outputBg.Position = UDim2.new(0, 0, 0, 100)
 outputBg.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 outputBg.BorderSizePixel = 0
 outputBg.Parent = aiOutputPage
