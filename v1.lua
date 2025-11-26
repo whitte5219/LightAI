@@ -34,7 +34,7 @@ You MUST output ONLY a single JSON object and NOTHING ELSE.
 No explanations, no extra text, no code blocks.
 
 You will ALWAYS receive GAME INFO in JSON after the user message.
-Use that GAME INFO to decide what actions to output (for example, use distances, health, and obstacles).
+Use that GAME INFO to decide what actions to output (for example, use distances, health, players, and obstacles).
 
 ALLOWED ACTION TYPES:
 
@@ -53,8 +53,14 @@ CLICK:
 LOOK:
   {"type":"LOOK","x":pixels,"y":pixels}
 
+WALK_TO:
+  {"type":"WALK_TO","mode":"nearest|random|furthest|object|saved","objectName":"optional name for object"}
+
 WALK_TO_NEAREST:
-  {"type":"WALK_TO_NEAREST"}
+  {"type":"WALK_TO_NEAREST"}   (same as WALK_TO with mode = "nearest")
+
+SAVE_POSITION:
+  {"type":"SAVE_POSITION"}
 
 WHILE example:
 {
@@ -70,7 +76,8 @@ OUTPUT FORMAT EXAMPLE:
 
 {"actions":[
   {"type":"MOVE","direction":"forward","time":0.5},
-  {"type":"JUMP"}
+  {"type":"JUMP"},
+  {"type":"WALK_TO","mode":"nearest"}
 ]}
 ]]
 
@@ -208,6 +215,9 @@ end
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local player = Players.LocalPlayer
 
+-- saved position memory
+local SavedPosition = nil
+
 -------------------------------------------------
 -- LOW-LEVEL INPUT FUNCTIONS
 -------------------------------------------------
@@ -256,7 +266,7 @@ local function lookAt(dx, dy)
 end
 
 -------------------------------------------------
--- HELPER: FIND NEAREST PLAYER
+-- HELPER: FIND PLAYERS
 -------------------------------------------------
 
 local function getNearestPlayer()
@@ -278,6 +288,38 @@ local function getNearestPlayer()
     end
 
     return nearest
+end
+
+local function getRandomPlayer()
+    local others = {}
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= player and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+            table.insert(others, plr)
+        end
+    end
+    if #others == 0 then return nil end
+    return others[math.random(1, #others)]
+end
+
+local function getFurthestPlayer()
+    local myChar = player.Character
+    if not myChar or not myChar:FindFirstChild("HumanoidRootPart") then return nil end
+
+    local myPos = myChar.HumanoidRootPart.Position
+    local furthest, furthestDist = nil, 0
+
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= player and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+            local pos = plr.Character.HumanoidRootPart.Position
+            local dist = (myPos - pos).Magnitude
+            if dist > furthestDist then
+                furthest = plr
+                furthestDist = dist
+            end
+        end
+    end
+
+    return furthest
 end
 
 -------------------------------------------------
@@ -351,20 +393,45 @@ local function getGameState()
 end
 
 -------------------------------------------------
--- WALK TO NEAREST (FULLY FIXED)
+-- OBJECT FINDER
 -------------------------------------------------
 
-local function walkToNearest()
-    local target = getNearestPlayer()
-    if not target then return end
+local function findObjectByName(name)
+    if not name or name == "" then return nil end
+    local lowerName = string.lower(name)
+    local closest
+    local closestDist = math.huge
 
-    local myChar = player.Character
-    if not myChar or not myChar:FindFirstChild("HumanoidRootPart") then return end
-    if not target.Character or not target.Character:FindFirstChild("HumanoidRootPart") then return end
+    local char = player.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    local origin = root and root.Position or Vector3.new(0, 0, 0)
 
-    local root = myChar.HumanoidRootPart
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("BasePart") then
+            local n = string.lower(obj.Name)
+            if string.find(n, lowerName, 1, true) then
+                local dist = (obj.Position - origin).Magnitude
+                if dist < closestDist then
+                    closest = obj
+                    closestDist = dist
+                end
+            end
+        end
+    end
 
-    local MAX_TIME = 10
+    return closest
+end
+
+-------------------------------------------------
+-- GENERIC WALK HELPERS
+-------------------------------------------------
+
+local function walkToPosition(targetPos, maxTime)
+    local char = player.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+    local root = char.HumanoidRootPart
+
+    maxTime = maxTime or 10
     local startTime = tick()
 
     -- release movement keys
@@ -373,19 +440,17 @@ local function walkToNearest()
     pressKeyUp(Enum.KeyCode.S)
     pressKeyUp(Enum.KeyCode.D)
 
-    while tick() - startTime < MAX_TIME do
-        if not target.Character or not target.Character:FindFirstChild("HumanoidRootPart") then break end
-
-        local targetPos = target.Character.HumanoidRootPart.Position
+    while tick() - startTime < maxTime do
         local myPos = root.Position
         local diff = targetPos - myPos
 
-        -- Rotate camera to face target
+        if diff.Magnitude <= 1.5 then
+            break
+        end
+
+        -- face position
         local cam = workspace.CurrentCamera
         cam.CFrame = CFrame.new(cam.CFrame.Position, targetPos)
-
-        -- stop if close
-        if diff.Magnitude <= 1.5 then break end
 
         -- CAMERA-BASED WASD MOVEMENT
         local camera = workspace.CurrentCamera
@@ -426,11 +491,76 @@ local function walkToNearest()
         RunService.Heartbeat:Wait()
     end
 
-    -- release keys at end
     pressKeyUp(Enum.KeyCode.W)
     pressKeyUp(Enum.KeyCode.A)
     pressKeyUp(Enum.KeyCode.S)
     pressKeyUp(Enum.KeyCode.D)
+end
+
+local function walkToPlayer(targetPlayer, maxTime)
+    if not targetPlayer then return end
+
+    local char = player.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+
+    maxTime = maxTime or 10
+    local startTime = tick()
+
+    while tick() - startTime < maxTime do
+        if not targetPlayer.Character or not targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            break
+        end
+
+        local targetPos = targetPlayer.Character.HumanoidRootPart.Position
+        walkToPosition(targetPos, 0.2) -- small chunk, then re-evaluate
+    end
+
+    pressKeyUp(Enum.KeyCode.W)
+    pressKeyUp(Enum.KeyCode.A)
+    pressKeyUp(Enum.KeyCode.S)
+    pressKeyUp(Enum.KeyCode.D)
+end
+
+local function walkToMode(mode, objectName)
+    mode = (mode or "nearest"):lower()
+
+    if mode == "nearest" then
+        local target = getNearestPlayer()
+        if target then
+            walkToPlayer(target, 10)
+        end
+
+    elseif mode == "random" then
+        local target = getRandomPlayer()
+        if target then
+            walkToPlayer(target, 10)
+        end
+
+    elseif mode == "furthest" then
+        local target = getFurthestPlayer()
+        if target then
+            walkToPlayer(target, 10)
+        end
+
+    elseif mode == "saved" then
+        if SavedPosition then
+            walkToPosition(SavedPosition, 10)
+        end
+
+    elseif mode == "object" then
+        local obj = findObjectByName(objectName or "")
+        if obj then
+            walkToPosition(obj.Position, 10)
+        end
+    end
+end
+
+-------------------------------------------------
+-- LEGACY: WALK TO NEAREST
+-------------------------------------------------
+
+local function walkToNearest()
+    walkToMode("nearest")
 end
 
 -------------------------------------------------
@@ -509,6 +639,16 @@ function executeActions(actions)
         elseif t == "WALK_TO_NEAREST" then
             walkToNearest()
 
+        elseif t == "WALK_TO" then
+            walkToMode(action.mode, action.objectName or action.name or action.targetName)
+
+        elseif t == "SAVE_POSITION" then
+            local char = player.Character
+            local root = char and char:FindFirstChild("HumanoidRootPart")
+            if root then
+                SavedPosition = root.Position
+            end
+
         elseif t == "WHILE" then
             executeWhileAction(action.duration, action.actions or {})
         end
@@ -516,7 +656,7 @@ function executeActions(actions)
 end
 
 -----------------------
--- CALL COHERE (UPDATED WITH GAME INFO)
+-- CALL COHERE (WITH GAME INFO)
 -----------------------
 function CallLightAI(userText)
     if sending then
@@ -540,7 +680,7 @@ function CallLightAI(userText)
                 end
             end
 
-            -- Game state (PART 3)
+            -- Game state
             local gameInfo = getGameState()
             local gameInfoJson = ""
             local okGI, encoded = pcall(function()
