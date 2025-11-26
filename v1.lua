@@ -54,13 +54,27 @@ LOOK:
   {"type":"LOOK","x":pixels,"y":pixels}
 
 WALK_TO:
-  {"type":"WALK_TO","mode":"nearest|random|furthest|object|saved","objectName":"optional name for object"}
+  {
+    "type":"WALK_TO",
+    "mode":"nearest|random|furthest|object|saved|random_baseplate|random_radius|random_radius_player",
+    "objectName":"optional object name (for mode 'object')",
+    "radius":10,               // for random_radius / random_radius_player
+    "playerName":"SomePlayer"  // for random_radius_player
+  }
 
 WALK_TO_NEAREST:
   {"type":"WALK_TO_NEAREST"}   (same as WALK_TO with mode = "nearest")
 
 SAVE_POSITION:
   {"type":"SAVE_POSITION"}
+
+RANDOM_WALK:
+  {
+    "type":"RANDOM_WALK",
+    "duration":seconds
+  }
+  // Example: walk in a random direction for 10 seconds:
+  // {"type":"RANDOM_WALK","duration":10}
 
 WHILE example:
 {
@@ -72,7 +86,7 @@ WHILE example:
   ]
 }
 
-OUTPUT FORMAT EXAMPLE:
+OUTPUT FORMAT EXAMPLE (CONTROL MODE):
 
 {"actions":[
   {"type":"MOVE","direction":"forward","time":0.5},
@@ -348,12 +362,23 @@ local function getFurthestPlayer()
     return furthest
 end
 
+local function findPlayerByName(partialName)
+    if not partialName or partialName == "" then return nil end
+    partialName = string.lower(partialName)
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if string.find(string.lower(plr.Name), partialName, 1, true) then
+            return plr
+        end
+    end
+    return nil
+end
+
 -------------------------------------------------
--- MAP SCAN + GAME STATE
+-- MAP SCAN + GAME STATE (MORE DETAIL)
 -------------------------------------------------
-local function scanMap()
+local function scanMap(maxObstacles)
     local obstacles = {}
-    local maxObstacles = 15
+    maxObstacles = maxObstacles or 40
 
     for _, obj in ipairs(workspace:GetDescendants()) do
         if #obstacles >= maxObstacles then break end
@@ -361,6 +386,8 @@ local function scanMap()
         if obj:IsA("BasePart") and obj.CanCollide and obj.Size.Magnitude > 2 then
             table.insert(obstacles, {
                 name = obj.Name,
+                anchored = obj.Anchored,
+                material = tostring(obj.Material),
                 position = { x = obj.Position.X, y = obj.Position.Y, z = obj.Position.Z },
                 size = { x = obj.Size.X, y = obj.Size.Y, z = obj.Size.Z },
             })
@@ -374,16 +401,38 @@ local function getGameState()
     local char = player.Character
     local root = char and char:FindFirstChild("HumanoidRootPart")
     local hum = char and char:FindFirstChildOfClass("Humanoid")
+    local camera = workspace.CurrentCamera
+
+    local selfInfo = {
+        name = player.Name,
+        health = hum and hum.Health or 0,
+        maxHealth = hum and hum.MaxHealth or 0,
+        walkSpeed = hum and hum.WalkSpeed or nil,
+        jumpPower = hum and hum.JumpPower or nil,
+        state = hum and tostring(hum:GetState()) or nil,
+        position = root and { x = root.Position.X, y = root.Position.Y, z = root.Position.Z } or nil,
+        team = player.Team and player.Team.Name or nil,
+        camera = camera and {
+            position = camera.CFrame and {
+                x = camera.CFrame.Position.X,
+                y = camera.CFrame.Position.Y,
+                z = camera.CFrame.Position.Z,
+            } or nil,
+            lookVector = camera.CFrame and {
+                x = camera.CFrame.LookVector.X,
+                y = camera.CFrame.LookVector.Y,
+                z = camera.CFrame.LookVector.Z,
+            } or nil
+        } or nil
+    }
 
     local state = {
-        self = {
-            health = hum and hum.Health or 0,
-            position = root and { x = root.Position.X, y = root.Position.Y, z = root.Position.Z } or nil,
-        },
+        self = selfInfo,
         nearestPlayer = nil,
         nearbyPlayers = {},
         map = {
-            obstacles = scanMap()
+            obstacles = scanMap(40),
+            totalPlayers = #Players:GetPlayers(),
         }
     }
 
@@ -395,18 +444,26 @@ local function getGameState()
         state.nearestPlayer = {
             name = nearest.Name,
             health = nhum and nhum.Health or 0,
+            maxHealth = nhum and nhum.MaxHealth or 0,
             distance = (root.Position - nroot.Position).Magnitude,
             position = { x = nroot.Position.X, y = nroot.Position.Y, z = nroot.Position.Z },
+            team = nearest.Team and nearest.Team.Name or nil,
         }
     end
 
     if root then
         for _, plr in ipairs(Players:GetPlayers()) do
-            if plr ~= player and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+            if plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
                 local nroot = plr.Character.HumanoidRootPart
+                local nhum = plr.Character:FindFirstChildOfClass("Humanoid")
                 table.insert(state.nearbyPlayers, {
                     name = plr.Name,
-                    distance = (root.Position - nroot.Position).Magnitude
+                    isSelf = (plr == player),
+                    distance = (root.Position - nroot.Position).Magnitude,
+                    health = nhum and nhum.Health or 0,
+                    maxHealth = nhum and nhum.MaxHealth or 0,
+                    position = { x = nroot.Position.X, y = nroot.Position.Y, z = nroot.Position.Z },
+                    team = plr.Team and plr.Team.Name or nil,
                 })
             end
         end
@@ -416,7 +473,7 @@ local function getGameState()
 end
 
 -------------------------------------------------
--- OBJECT FINDER
+-- OBJECT / BASEPLATE HELPERS
 -------------------------------------------------
 local function findObjectByName(name)
     if not name or name == "" then return nil end
@@ -444,26 +501,61 @@ local function findObjectByName(name)
     return closest
 end
 
+local function getBaseplate()
+    local bp = workspace:FindFirstChild("Baseplate")
+    if bp and bp:IsA("BasePart") then return bp end
+
+    local best, bestArea = nil, 0
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("BasePart") and obj.Anchored then
+            local area = obj.Size.X * obj.Size.Z
+            if area > bestArea then
+                best = obj
+                bestArea = area
+            end
+        end
+    end
+    return best
+end
+
+local function randomPointInRadius(center, radius)
+    radius = radius or 10
+    local r = radius * math.sqrt(math.random())
+    local theta = math.random() * math.pi * 2
+    local offset = Vector3.new(math.cos(theta) * r, 0, math.sin(theta) * r)
+    return center + offset
+end
+
 -------------------------------------------------
--- WALK HELPERS
+-- WALK HELPERS (IMPROVED)
 -------------------------------------------------
-local function walkToPosition(targetPos, maxTime)
+local function walkToPosition(targetPos, maxTime, reachDist)
     local char = player.Character
     if not char or not char:FindFirstChild("HumanoidRootPart") then return end
     local root = char.HumanoidRootPart
+    local hum = char:FindFirstChildOfClass("Humanoid")
 
-    maxTime = maxTime or 10
+    reachDist = reachDist or 2
+
+    if not maxTime then
+        local startDist = (targetPos - root.Position).Magnitude
+        if hum and hum.WalkSpeed and hum.WalkSpeed > 0 then
+            maxTime = startDist / hum.WalkSpeed + 5
+        else
+            maxTime = 20
+        end
+    end
+
     local startTime = tick()
-
     releaseMovementKeys()
 
     while tick() - startTime < maxTime do
         if stopRequested then break end
+        if not root.Parent then break end
 
         local myPos = root.Position
         local diff = targetPos - myPos
-
-        if diff.Magnitude <= 1.5 then
+        if diff.Magnitude <= reachDist then
             break
         end
 
@@ -511,7 +603,7 @@ local function walkToPlayer(targetPlayer, maxTime)
     local char = player.Character
     if not char or not char:FindFirstChild("HumanoidRootPart") then return end
 
-    maxTime = maxTime or 10
+    maxTime = maxTime or 30
     local startTime = tick()
 
     while tick() - startTime < maxTime do
@@ -521,49 +613,121 @@ local function walkToPlayer(targetPlayer, maxTime)
             break
         end
 
+        local root = char:FindFirstChild("HumanoidRootPart")
+        if not root then break end
+
         local targetPos = targetPlayer.Character.HumanoidRootPart.Position
-        walkToPosition(targetPos, 0.2)
+        local dist = (root.Position - targetPos).Magnitude
+        if dist <= 3 then
+            break
+        end
+
+        walkToPosition(targetPos, 1.0, 3)
     end
 
     releaseMovementKeys()
 end
 
-local function walkToMode(mode, objectName)
-    mode = (mode or "nearest"):lower()
+local function walkToMode(action)
+    local mode = (action.mode or "nearest"):lower()
+    local objectName = action.objectName or action.name or action.targetName
+    local radius = tonumber(action.radius or action.range or 0)
+    local playerName = action.playerName or action.player or action.targetPlayer
 
     if mode == "nearest" then
         local target = getNearestPlayer()
         if target then
-            walkToPlayer(target, 10)
+            walkToPlayer(target, 30)
         end
 
     elseif mode == "random" then
         local target = getRandomPlayer()
         if target then
-            walkToPlayer(target, 10)
+            walkToPlayer(target, 30)
         end
 
     elseif mode == "furthest" then
         local target = getFurthestPlayer()
         if target then
-            walkToPlayer(target, 10)
+            walkToPlayer(target, 40)
         end
 
     elseif mode == "saved" then
         if SavedPosition then
-            walkToPosition(SavedPosition, 10)
+            walkToPosition(SavedPosition, nil, 3)
         end
 
     elseif mode == "object" then
         local obj = findObjectByName(objectName or "")
         if obj then
-            walkToPosition(obj.Position, 10)
+            walkToPosition(obj.Position, nil, 3)
+        end
+
+    elseif mode == "random_baseplate" then
+        local base = getBaseplate()
+        if base then
+            local rx = math.random(-base.Size.X/2, base.Size.X/2)
+            local rz = math.random(-base.Size.Z/2, base.Size.Z/2)
+            local targetPos = base.Position + Vector3.new(rx, 0, rz)
+            walkToPosition(targetPos, nil, 3)
+        end
+
+    elseif mode == "random_radius" then
+        radius = radius > 0 and radius or 10
+        local char = player.Character
+        local root = char and char:FindFirstChild("HumanoidRootPart")
+        if root then
+            local targetPos = randomPointInRadius(root.Position, radius)
+            walkToPosition(targetPos, nil, 3)
+        end
+
+    elseif mode == "random_radius_player" then
+        radius = radius > 0 and radius or 10
+        local p = findPlayerByName(playerName or "")
+        if p and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+            local center = p.Character.HumanoidRootPart.Position
+            local targetPos = randomPointInRadius(center, radius)
+            walkToPosition(targetPos, nil, 3)
         end
     end
 end
 
 local function walkToNearest()
-    walkToMode("nearest")
+    walkToMode({ mode = "nearest" })
+end
+
+-------------------------------------------------
+-- RANDOM WALK
+-------------------------------------------------
+local function randomWalk(duration)
+    duration = tonumber(duration) or 5
+    local char = player.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+
+    local angle = math.random() * math.pi * 2
+    local dir = Vector3.new(math.cos(angle), 0, math.sin(angle))
+
+    local endTime = tick() + duration
+    releaseMovementKeys()
+
+    while tick() < endTime do
+        if stopRequested then break end
+        if not root.Parent then break end
+
+        local camera = workspace.CurrentCamera
+        local targetPos = root.Position + dir * 20
+        camera.CFrame = CFrame.new(camera.CFrame.Position, targetPos)
+
+        releaseMovementKeys()
+        pressKeyDown(Enum.KeyCode.W)
+
+        RunService.Heartbeat:Wait()
+        root = char and char:FindFirstChild("HumanoidRootPart")
+        if not root then break end
+    end
+
+    releaseMovementKeys()
 end
 
 -------------------------------------------------
@@ -637,9 +801,18 @@ local function describeAction(action)
         local mode = (action.mode or "nearest"):lower()
         if mode == "object" then
             local name = action.objectName or action.name or action.targetName or "object"
-            return "walking to object \"" .. tostring(name) .. "\""
+            return 'walking to object "' .. tostring(name) .. '"'
         elseif mode == "saved" then
             return "walking to saved position"
+        elseif mode == "random_baseplate" then
+            return "walking to random point on baseplate"
+        elseif mode == "random_radius" then
+            local r = tonumber(action.radius or action.range or 0) or 0
+            return string.format("walking to random point within %.0f studs", r)
+        elseif mode == "random_radius_player" then
+            local r = tonumber(action.radius or action.range or 0) or 0
+            local pn = action.playerName or action.player or action.targetPlayer or "player"
+            return string.format("walking to random point within %.0f studs of %s", r, pn)
         else
             return "walking to " .. mode .. " player"
         end
@@ -648,6 +821,9 @@ local function describeAction(action)
     elseif t == "WHILE" then
         local dur = tonumber(action.duration) or 0
         return string.format("running while-block (%.1fs)", dur)
+    elseif t == "RANDOM_WALK" then
+        local dur = tonumber(action.duration) or 0
+        return string.format("random walk (%.1fs)", dur)
     end
 
     return "unknown action"
@@ -704,7 +880,7 @@ function executeActions(actions)
             walkToNearest()
 
         elseif t == "WALK_TO" then
-            walkToMode(action.mode, action.objectName or action.name or action.targetName)
+            walkToMode(action)
 
         elseif t == "SAVE_POSITION" then
             local char = player.Character
@@ -715,6 +891,9 @@ function executeActions(actions)
 
         elseif t == "WHILE" then
             executeWhileAction(action.duration, action.actions or {})
+
+        elseif t == "RANDOM_WALK" then
+            randomWalk(action.duration)
         end
     end
 
@@ -1268,7 +1447,7 @@ actionFrame.Parent = aiOutputPage
 
 currentActionLabel = Instance.new("TextLabel")
 currentActionLabel.BackgroundTransparency = 1
-currentActionLabel.Size = UDim2.new(0, 220, 1, 0)
+currentActionLabel.Size = UDim2.new(0, 260, 1, 0)
 currentActionLabel.Font = Enum.Font.Gotham
 currentActionLabel.TextSize = 14
 currentActionLabel.TextXAlignment = Enum.TextXAlignment.Left
@@ -1279,7 +1458,7 @@ currentActionLabel.Parent = actionFrame
 stopActionButton = Instance.new("TextButton")
 stopActionButton.Name = "StopActionButton"
 stopActionButton.Size = UDim2.new(0, 100, 0, 22)
-stopActionButton.Position = UDim2.new(0, 230, 0, 1)
+stopActionButton.Position = UDim2.new(0, 270, 0, 1)
 stopActionButton.BackgroundColor3 = Color3.fromRGB(40, 0, 0)
 stopActionButton.BorderSizePixel = 0
 stopActionButton.AutoButtonColor = false
@@ -1494,10 +1673,10 @@ end)
 Log("system", "LightAI (Cohere) ready. Type a message below.")
 
 -----------------------
--- PAGE: GUI APPEARANCE (empty for now)
+-- PAGE: GUI APPEARANCE (placeholder)
 -----------------------
 local guiAppearancePage = pages["GUI Appearance"]
--- placeholder for future appearance options
+-- future appearance controls here
 
 -----------------------
 -- PAGE: INFO
@@ -1536,21 +1715,23 @@ local function addInfoLine(text)
     label.Parent = infoBody
 end
 
-addInfoLine("• LightAI has two modes:")
-addInfoLine("  - Chat Mode: normal conversation, advice, help with Roblox or anything else.")
+addInfoLine("• LightAI modes:")
+addInfoLine("  - Chat Mode: normal conversation and help.")
 addInfoLine("  - Control Mode: LightAI sends JSON commands to move your character.")
-addInfoLine("• Toggle Control Mode in the AI Output tab using the 'Control Character' switch.")
-addInfoLine("• While controlling, the 'Action' line shows what LightAI is doing right now.")
-addInfoLine("• Use 'Stop Action' to cancel the current movement and any remaining actions.")
-addInfoLine("• Main control actions:")
+addInfoLine("• Use the 'Control Character' toggle in AI Output to switch modes.")
+addInfoLine("• The 'Action' line shows what LightAI is doing right now.")
+addInfoLine("• 'Stop Action' cancels the current action and any remaining steps in that batch.")
+addInfoLine("• Movement actions:")
 addInfoLine("  MOVE: walk forward/back/left/right for a short time.")
-addInfoLine("  JUMP: make your character jump.")
-addInfoLine("  WALK_TO / WALK_TO_NEAREST: move towards players, objects, or a saved spot.")
-addInfoLine("  SAVE_POSITION: remember your current position for later WALK_TO 'saved'.")
-addInfoLine("  WHILE: combine actions like moving and jumping together for a duration.")
-addInfoLine("• You can give natural instructions, like:")
-addInfoLine('  "Follow the nearest player and jump every few seconds."')
-addInfoLine('  "Walk to the nearest player, save the spot, then walk back to it later."')
+addInfoLine("  WALK_TO: follow players, go to objects, saved position, or random points.")
+addInfoLine("    - nearest/random/furthest player")
+addInfoLine("    - object by name, saved position")
+addInfoLine("    - random point on the baseplate")
+addInfoLine("    - random point within a radius of you or another player")
+addInfoLine("  RANDOM_WALK: walk in a random direction for a duration.")
+addInfoLine("  SAVE_POSITION: remember your current position (used by WALK_TO 'saved').")
+addInfoLine("  WHILE: combine actions like moving and jumping together for some time.")
+addInfoLine("• The AI also sees detailed GAME INFO about you, other players, and the map to choose smarter actions.")
 
 task.wait()
 infoBody.CanvasSize = UDim2.new(0, 0, 0, infoListLayout.AbsoluteContentSize.Y + 10)
