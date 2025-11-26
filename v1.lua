@@ -8,8 +8,8 @@
 -----------------------
 -- CONFIG
 -----------------------
-local WINDOW_WIDTH = 600
-local WINDOW_HEIGHT = 380
+local WINDOW_WIDTH = 650
+local WINDOW_HEIGHT = 420
 local SIDEBAR_WIDTH = 150
 local PAGE_MARGIN = 10
 
@@ -149,7 +149,7 @@ end
 -- COHERE CONFIG + HTTP
 -----------------------
 local COHERE_KEY = (getgenv and getgenv().LIGHTAI_KEY) or "NO_KEY_SET"
-local COHERE_MODEL = "command-a-vision-07-2025"           -- choose a valid model from your Cohere account
+local COHERE_MODEL = "command-a-vision-07-2025"
 local API_URL = "https://api.cohere.ai/v1/chat"
 
 local function httpPostJson(url, jsonBody)
@@ -209,13 +209,11 @@ local function httpPostJson(url, jsonBody)
 end
 
 -----------------------
--- CHARACTER CONTROL HELPERS (ADVANCED + FIXED)
+-- CHARACTER CONTROL HELPERS
 -----------------------
-
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local player = Players.LocalPlayer
 
--- saved position memory
 local SavedPosition = nil
 
 -- action tracking
@@ -239,13 +237,19 @@ end
 -------------------------------------------------
 -- LOW-LEVEL INPUT FUNCTIONS
 -------------------------------------------------
-
 local function pressKeyDown(key)
     VirtualInputManager:SendKeyEvent(true, key, false, game)
 end
 
 local function pressKeyUp(key)
     VirtualInputManager:SendKeyEvent(false, key, false, game)
+end
+
+local function releaseMovementKeys()
+    pressKeyUp(Enum.KeyCode.W)
+    pressKeyUp(Enum.KeyCode.A)
+    pressKeyUp(Enum.KeyCode.S)
+    pressKeyUp(Enum.KeyCode.D)
 end
 
 local function pressMouse(time)
@@ -270,17 +274,9 @@ local function pressKey(keycode, time)
     pressKeyUp(keycode)
 end
 
-local function releaseMovementKeys()
-    pressKeyUp(Enum.KeyCode.W)
-    pressKeyUp(Enum.KeyCode.A)
-    pressKeyUp(Enum.KeyCode.S)
-    pressKeyUp(Enum.KeyCode.D)
-end
-
 -------------------------------------------------
--- CAMERA ROTATION (NEW SYSTEM)
+-- CAMERA ROTATION
 -------------------------------------------------
-
 local function lookAt(dx, dy)
     dx = tonumber(dx) or 0
     dy = tonumber(dy) or 0
@@ -288,10 +284,8 @@ local function lookAt(dx, dy)
     local camera = workspace.CurrentCamera
     local cf = camera.CFrame
 
-    -- horizontal
     cf = cf * CFrame.Angles(0, math.rad(-dx * 0.2), 0)
 
-    -- vertical with clamp
     local x, y, z = cf:ToEulerAnglesXYZ()
     y = math.clamp(y - math.rad(dy * 0.2), -1.2, 1.2)
 
@@ -299,9 +293,8 @@ local function lookAt(dx, dy)
 end
 
 -------------------------------------------------
--- HELPER: FIND PLAYERS
+-- PLAYER HELPERS
 -------------------------------------------------
-
 local function getNearestPlayer()
     local myChar = player.Character
     if not myChar or not myChar:FindFirstChild("HumanoidRootPart") then return nil end
@@ -356,9 +349,8 @@ local function getFurthestPlayer()
 end
 
 -------------------------------------------------
--- MAP SCAN + GAME STATE (PART 3)
+-- MAP SCAN + GAME STATE
 -------------------------------------------------
-
 local function scanMap()
     local obstacles = {}
     local maxObstacles = 15
@@ -395,7 +387,6 @@ local function getGameState()
         }
     }
 
-    -- nearest player
     local nearest = getNearestPlayer()
     if nearest and root and nearest.Character and nearest.Character:FindFirstChild("HumanoidRootPart") then
         local nroot = nearest.Character.HumanoidRootPart
@@ -409,7 +400,6 @@ local function getGameState()
         }
     end
 
-    -- all nearby players
     if root then
         for _, plr in ipairs(Players:GetPlayers()) do
             if plr ~= player and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
@@ -428,7 +418,6 @@ end
 -------------------------------------------------
 -- OBJECT FINDER
 -------------------------------------------------
-
 local function findObjectByName(name)
     if not name or name == "" then return nil end
     local lowerName = string.lower(name)
@@ -456,9 +445,8 @@ local function findObjectByName(name)
 end
 
 -------------------------------------------------
--- GENERIC WALK HELPERS
+-- WALK HELPERS
 -------------------------------------------------
-
 local function walkToPosition(targetPos, maxTime)
     local char = player.Character
     if not char or not char:FindFirstChild("HumanoidRootPart") then return end
@@ -479,11 +467,9 @@ local function walkToPosition(targetPos, maxTime)
             break
         end
 
-        -- face position
         local cam = workspace.CurrentCamera
         cam.CFrame = CFrame.new(cam.CFrame.Position, targetPos)
 
-        -- CAMERA-BASED WASD MOVEMENT
         local camera = workspace.CurrentCamera
         local forward = (camera.CFrame.LookVector * Vector3.new(1, 0, 1))
         local right = (camera.CFrame.RightVector * Vector3.new(1, 0, 1))
@@ -499,17 +485,14 @@ local function walkToPosition(targetPos, maxTime)
         local fDot = diffDir:Dot(forward)
         local rDot = diffDir:Dot(right)
 
-        -- reset keys
         releaseMovementKeys()
 
-        -- Forward/back
         if fDot > 0.2 then
             pressKeyDown(Enum.KeyCode.W)
         elseif fDot < -0.2 then
             pressKeyDown(Enum.KeyCode.S)
         end
 
-        -- Left/right
         if rDot > 0.2 then
             pressKeyDown(Enum.KeyCode.D)
         elseif rDot < -0.2 then
@@ -539,7 +522,7 @@ local function walkToPlayer(targetPlayer, maxTime)
         end
 
         local targetPos = targetPlayer.Character.HumanoidRootPart.Position
-        walkToPosition(targetPos, 0.2) -- small chunk, then re-evaluate
+        walkToPosition(targetPos, 0.2)
     end
 
     releaseMovementKeys()
@@ -579,10 +562,6 @@ local function walkToMode(mode, objectName)
     end
 end
 
--------------------------------------------------
--- LEGACY: WALK TO NEAREST
--------------------------------------------------
-
 local function walkToNearest()
     walkToMode("nearest")
 end
@@ -590,7 +569,6 @@ end
 -------------------------------------------------
 -- WHILE ACTIONS
 -------------------------------------------------
-
 local function executeWhileAction(duration, actions)
     duration = tonumber(duration) or 1.0
     local endTime = tick() + duration
@@ -630,7 +608,6 @@ end
 -------------------------------------------------
 -- ACTION DESCRIPTION (FOR UI)
 -------------------------------------------------
-
 local function describeAction(action)
     if not action or type(action) ~= "table" then
         return "Idle"
@@ -679,7 +656,6 @@ end
 -------------------------------------------------
 -- MAIN EXECUTION SYSTEM
 -------------------------------------------------
-
 function executeActions(actions)
     if type(actions) ~= "table" then
         clearCurrentAction()
@@ -761,7 +737,6 @@ function CallLightAI(userText)
 
     task.spawn(function()
         local ok, result = pcall(function()
-            -- Build chat history
             local chat_history = {}
             for _, h in ipairs(AI.History) do
                 if h.role == "user" then
@@ -771,7 +746,6 @@ function CallLightAI(userText)
                 end
             end
 
-            -- Game state
             local gameInfo = getGameState()
             local gameInfoJson = ""
             local okGI, encoded = pcall(function()
@@ -783,10 +757,8 @@ function CallLightAI(userText)
                 gameInfoJson = "{}"
             end
 
-            -- Select correct instructions
             local preamble = ControlCharacterEnabled and AI.ControlInstructions or AI.ChatInstructions
 
-            -- Build payload
             local payload = {
                 model = COHERE_MODEL,
                 message = "USER MESSAGE:\n" .. userText .. "\n\nGAME INFO (JSON):\n" .. gameInfoJson,
@@ -820,7 +792,6 @@ function CallLightAI(userText)
             local reply = result
 
             if ControlCharacterEnabled then
-                -- Extract JSON block
                 local jsonChunk = reply:match("{.*}")
                 if not jsonChunk then
                     Log("system", "Couldn't find JSON in control reply:\n" .. tostring(reply))
@@ -1100,7 +1071,7 @@ pagePadding.Parent = pageContainer
 -----------------------
 -- TABS / PAGES
 -----------------------
-local tabs = { "AI Control", "AI Output", "GUI Appearance" }
+local tabs = { "AI Control", "AI Output", "GUI Appearance", "Info" }
 
 local pages = {}
 local tabButtons = {}
@@ -1282,92 +1253,6 @@ quickButton.MouseButton1Click:Connect(function()
 end)
 updateModeButtons()
 
-local msgLabel = Instance.new("TextLabel")
-msgLabel.BackgroundTransparency = 1
-msgLabel.Size = UDim2.new(1, 0, 0, 20)
-msgLabel.Position = UDim2.new(0, 0, 0, 80)
-msgLabel.Font = Enum.Font.Gotham
-msgLabel.TextSize = 14
-msgLabel.TextXAlignment = Enum.TextXAlignment.Left
-msgLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
-msgLabel.Text = "Your message:"
-msgLabel.Parent = aiControlPage
-
-local msgBox = Instance.new("TextBox")
-msgBox.Name = "MessageBox"
-msgBox.Size = UDim2.new(1, 0, 0, 120)
-msgBox.Position = UDim2.new(0, 0, 0, 100)
-msgBox.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-msgBox.BorderSizePixel = 0
-msgBox.ClearTextOnFocus = false
-msgBox.Font = Enum.Font.Gotham
-msgBox.TextSize = 14
-msgBox.TextColor3 = Color3.fromRGB(255, 255, 255)
-msgBox.TextXAlignment = Enum.TextXAlignment.Left
-msgBox.TextYAlignment = Enum.TextYAlignment.Top
-msgBox.TextWrapped = true
-msgBox.MultiLine = true
-msgBox.PlaceholderText = "Type something for LightAI..."
-msgBox.Parent = aiControlPage
-
-local msgCorner = Instance.new("UICorner")
-msgCorner.CornerRadius = UDim.new(0, 10)
-msgCorner.Parent = msgBox
-
-local msgStroke = Instance.new("UIStroke")
-msgStroke.Color = Color3.fromRGB(255, 255, 255)
-msgStroke.Transparency = 0.8
-msgStroke.Thickness = 1
-msgStroke.Parent = msgBox
-
-local sendButton = Instance.new("TextButton")
-sendButton.Name = "SendButton"
-sendButton.Size = UDim2.new(0, 100, 0, 32)
-sendButton.Position = UDim2.new(1, -110, 0, 230)
-sendButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-sendButton.BorderSizePixel = 0
-sendButton.AutoButtonColor = false
-sendButton.Font = Enum.Font.GothamBold
-sendButton.TextSize = 14
-sendButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-sendButton.Text = "Send"
-sendButton.Parent = aiControlPage
-
-local sendCorner = Instance.new("UICorner")
-sendCorner.CornerRadius = UDim.new(0, 10)
-sendCorner.Parent = sendButton
-
-local sendStroke = Instance.new("UIStroke")
-sendStroke.Color = Color3.fromRGB(255, 255, 255)
-sendStroke.Transparency = 0.7
-sendStroke.Thickness = 1
-sendStroke.Parent = sendButton
-
-sendButton.MouseEnter:Connect(function()
-    TweenService:Create(sendButton, TweenInfo.new(0.15), {
-        BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-    }):Play()
-end)
-sendButton.MouseLeave:Connect(function()
-    TweenService:Create(sendButton, TweenInfo.new(0.15), {
-        BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-    }):Play()
-end)
-
-sendButton.MouseButton1Click:Connect(function()
-    local text = msgBox.Text
-    msgBox.Text = ""
-    CallLightAI(text)
-end)
-
-msgBox.FocusLost:Connect(function(enterPressed)
-    if enterPressed then
-        local text = msgBox.Text
-        msgBox.Text = ""
-        CallLightAI(text)
-    end
-end)
-
 -----------------------
 -- PAGE: AI OUTPUT
 -----------------------
@@ -1416,7 +1301,7 @@ stopStroke.Parent = stopActionButton
 
 stopActionButton.MouseButton1Click:Connect(function()
     if not actionRunning then
-        return -- do nothing when idle
+        return
     end
     stopRequested = true
     Log("system", "Stop requested. Current and remaining actions will be cancelled.")
@@ -1487,10 +1372,10 @@ end)
 updateToggleVisual()
 clearCurrentAction()
 
--- Output box
+-- Output area (chat log)
 local outputBg = Instance.new("Frame")
 outputBg.Name = "OutputBackground"
-outputBg.Size = UDim2.new(1, 0, 1, -100)
+outputBg.Size = UDim2.new(1, 0, 1, -160)
 outputBg.Position = UDim2.new(0, 0, 0, 100)
 outputBg.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 outputBg.BorderSizePixel = 0
@@ -1518,19 +1403,159 @@ outputFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
 outputFrame.Parent = outputBg
 
 outputListLayout = Instance.new("UIListLayout")
-outputListLayout.Padding = UDim.new(0, 4)
+outputListLayout.Padding = UDim2.new(0, 4)
 outputListLayout.FillDirection = Enum.FillDirection.Vertical
 outputListLayout.SortOrder = Enum.SortOrder.LayoutOrder
 outputListLayout.Parent = outputFrame
 
-Log("system", "LightAI (Cohere) ready. Type a message in the AI Control tab.")
+-- Chat-style input at bottom
+local inputFrame = Instance.new("Frame")
+inputFrame.Name = "InputFrame"
+inputFrame.BackgroundTransparency = 1
+inputFrame.Size = UDim2.new(1, 0, 0, 50)
+inputFrame.Position = UDim2.new(0, 0, 1, -50)
+inputFrame.Parent = aiOutputPage
+
+local chatBox = Instance.new("TextBox")
+chatBox.Name = "ChatBox"
+chatBox.Size = UDim2.new(1, -120, 1, 0)
+chatBox.Position = UDim2.new(0, 0, 0, 0)
+chatBox.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+chatBox.BorderSizePixel = 0
+chatBox.ClearTextOnFocus = false
+chatBox.Font = Enum.Font.Gotham
+chatBox.TextSize = 14
+chatBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+chatBox.TextXAlignment = Enum.TextXAlignment.Left
+chatBox.TextYAlignment = Enum.TextYAlignment.Center
+chatBox.TextWrapped = true
+chatBox.MultiLine = false
+chatBox.PlaceholderText = "Type a message for LightAI..."
+chatBox.Parent = inputFrame
+
+local chatCorner = Instance.new("UICorner")
+chatCorner.CornerRadius = UDim.new(0, 10)
+chatCorner.Parent = chatBox
+
+local chatStroke = Instance.new("UIStroke")
+chatStroke.Color = Color3.fromRGB(255, 255, 255)
+chatStroke.Transparency = 0.8
+chatStroke.Thickness = 1
+chatStroke.Parent = chatBox
+
+local sendButton = Instance.new("TextButton")
+sendButton.Name = "SendButton"
+sendButton.Size = UDim2.new(0, 100, 0, 32)
+sendButton.Position = UDim2.new(1, -100, 0.5, -16)
+sendButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+sendButton.BorderSizePixel = 0
+sendButton.AutoButtonColor = false
+sendButton.Font = Enum.Font.GothamBold
+sendButton.TextSize = 14
+sendButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+sendButton.Text = "Send"
+sendButton.Parent = inputFrame
+
+local sendCorner = Instance.new("UICorner")
+sendCorner.CornerRadius = UDim.new(0, 10)
+sendCorner.Parent = sendButton
+
+local sendStroke = Instance.new("UIStroke")
+sendStroke.Color = Color3.fromRGB(255, 255, 255)
+sendStroke.Transparency = 0.7
+sendStroke.Thickness = 1
+sendStroke.Parent = sendButton
+
+sendButton.MouseEnter:Connect(function()
+    TweenService:Create(sendButton, TweenInfo.new(0.15), {
+        BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+    }):Play()
+end)
+sendButton.MouseLeave:Connect(function()
+    TweenService:Create(sendButton, TweenInfo.new(0.15), {
+        BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    }):Play()
+end)
+
+sendButton.MouseButton1Click:Connect(function()
+    local text = chatBox.Text
+    chatBox.Text = ""
+    CallLightAI(text)
+end)
+
+chatBox.FocusLost:Connect(function(enterPressed)
+    if enterPressed then
+        local text = chatBox.Text
+        chatBox.Text = ""
+        CallLightAI(text)
+    end
+end)
+
+Log("system", "LightAI (Cohere) ready. Type a message below.")
 
 -----------------------
 -- PAGE: GUI APPEARANCE (empty for now)
 -----------------------
 local guiAppearancePage = pages["GUI Appearance"]
+-- (placeholder for future appearance settings)
+
+-----------------------
+-- PAGE: INFO
+-----------------------
+local infoPage = pages["Info"]
+
+local infoBody = Instance.new("ScrollingFrame")
+infoBody.Name = "InfoBody"
+infoBody.BackgroundTransparency = 1
+infoBody.BorderSizePixel = 0
+infoBody.Size = UDim2.new(1, -4, 1, -40)
+infoBody.Position = UDim2.new(0, 2, 0, 36)
+infoBody.ScrollBarThickness = 4
+infoBody.ScrollBarImageColor3 = Color3.fromRGB(180, 180, 180)
+infoBody.CanvasSize = UDim2.new(0, 0, 0, 0)
+infoBody.Parent = infoPage
+
+local infoListLayout = Instance.new("UIListLayout")
+infoListLayout.Padding = UDim2.new(0, 8)
+infoListLayout.FillDirection = Enum.FillDirection.Vertical
+infoListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+infoListLayout.Parent = infoBody
+
+local function addInfoLine(text)
+    local label = Instance.new("TextLabel")
+    label.BackgroundTransparency = 1
+    label.Size = UDim2.new(1, -8, 0, 0)
+    label.AutomaticSize = Enum.AutomaticSize.Y
+    label.Font = Enum.Font.Gotham
+    label.TextWrapped = true
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.TextYAlignment = Enum.TextYAlignment.Top
+    label.TextSize = 14
+    label.TextColor3 = Color3.fromRGB(230, 230, 230)
+    label.Text = text
+    label.Parent = infoBody
+end
+
+addInfoLine("• LightAI has two modes:")
+addInfoLine("  - Chat Mode: normal conversation, advice, help with Roblox or anything else.")
+addInfoLine("  - Control Mode: LightAI sends JSON commands to move your character.")
+addInfoLine("• Toggle Control Mode in the AI Output tab using the 'Control Character' switch.")
+addInfoLine("• While controlling, the 'Action' line shows what LightAI is doing right now.")
+addInfoLine("• Use 'Stop Action' to cancel the current movement and any remaining actions.")
+addInfoLine("• Main control actions:")
+addInfoLine("  MOVE: walk forward/back/left/right for a short time.")
+addInfoLine("  JUMP: make your character jump.")
+addInfoLine("  WALK_TO / WALK_TO_NEAREST: move towards players, objects, or a saved spot.")
+addInfoLine("  SAVE_POSITION: remember your current position for later WALK_TO 'saved'.")
+addInfoLine("  WHILE: combine actions like moving and jumping together for a duration.")
+addInfoLine("• You can give natural instructions, like:")
+addInfoLine('  "Follow the nearest player and jump every few seconds."')
+addInfoLine('  "Walk to the nearest player, save the spot, then walk back to it later."')
+
+task.wait()
+infoBody.CanvasSize = UDim2.new(0, 0, 0, infoListLayout.AbsoluteContentSize.Y + 10)
 
 -----------------------
 -- DEFAULT TAB
 -----------------------
-setActiveTab("AI Control")
+setActiveTab("AI Output")
